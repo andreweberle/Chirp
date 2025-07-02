@@ -21,6 +21,9 @@
 		<Description>A flexible messaging library supporting multiple message brokers including RabbitMQ, Kafka, Redis, Azure Service Bus, Amazon SQS, NATS, and Google PubSub.</Description>
 		<PackageReadmeFile>README.md</PackageReadmeFile>
 	</PropertyGroup>
+	<ItemGroup>
+		<None Include="README.md" Pack="true" PackagePath="\" />
+	</ItemGroup>
 
   <ItemGroup>
     <Compile Remove="tests\**" />
