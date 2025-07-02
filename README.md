@@ -1,6 +1,6 @@
-# Chirp - Flexible Messaging Library
+﻿# Chirp - Flexible Messaging Library
 
-![Chirp Logo](https://via.placeholder.com/150x150?text=Chirp)
+[comment]: <![Chirp Logo](https://via.placeholder.com/150x150?text=Chirp)>
 
 [![NuGet](https://img.shields.io/nuget/v/Chirp.svg)](https://www.nuget.org/packages/Chirp/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
@@ -25,17 +25,12 @@ Chirp is a flexible, provider-agnostic messaging library that simplifies publish
 - **Clean subscription management** with in-memory event tracking
 
 ## Installation
-
-```bash
-dotnet add package Chirp
-```
-
+`dotnet add package Chirp`
 ## Getting Started
 
 ### Configuration
 
-Add the necessary configuration to your appsettings.json:
-
+Add the necessary configuration to your `appsettings.json`:
 ```json
 {
   "RMQ": {
@@ -48,14 +43,10 @@ Add the necessary configuration to your appsettings.json:
   }
 }
 ```
-
 ### Setting Up Dependencies
-
 Register the required dependencies in your `Program.cs` or `Startup.cs`:
-
 ```csharp
-using Chirp.Application.Interfaces;
-using Chirp.Domain.Common;
+using Chirp.Infrastructure;
 using Chirp.Infrastructure.EventBus;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -68,21 +59,17 @@ services.AddChirp(options =>
     options.RetryCount = 3;
 });
 ```
-
 ### Creating Events
 
 Create event classes that inherit from `IntegrationEvent`:
-
 ```csharp
 using Chirp.Domain.Common;
 
 public record OrderCreatedEvent(int OrderId, string CustomerName, decimal Total) : IntegrationEvent;
 ```
-
 ### Creating Event Handlers
 
 Create handlers that implement `IIntegrationEventHandler<T>`:
-
 ```csharp
 using Chirp.Application.Interfaces;
 
@@ -96,11 +83,9 @@ public class OrderCreatedEventHandler : IIntegrationEventHandler<OrderCreatedEve
     }
 }
 ```
-
 ### Publishing Events
 
 Inject `IEventBus` and publish events:
-
 ```csharp
 public class OrderService
 {
@@ -119,11 +104,9 @@ public class OrderService
     }
 }
 ```
-
 ### Subscribing to Events
 
 Subscribe to events in your application startup:
-
 ```csharp
 public class Startup
 {
@@ -136,13 +119,11 @@ public class Startup
     }
 }
 ```
-
 ## Advanced Usage
 
 ### Using the Event Bus Factory
 
 You can also use the `EventBusFactory` to create an instance of the event bus:
-
 ```csharp
 IEventBus eventBus = EventBusFactory.Create(
     EventBusType.RabbitMQ,
@@ -151,37 +132,79 @@ IEventBus eventBus = EventBusFactory.Create(
     "my_service_queue",
     retryCount: 5);
 ```
+### Configuring with Traditional Method
 
-### Working with Multiple Event Bus Implementations
-
-If your application needs to work with multiple message brokers:
-
+If you prefer more explicit configuration, you can use the `AddEventBus` method:
 ```csharp
-// Configure RabbitMQ
+// Register event bus services with explicit parameters
+services.AddEventBus(
+    configuration,
+    queueOrTopicName: "my_service_queue",
+    eventBusType: EventBusType.RabbitMQ,
+    retryCount: 5);
+```
+### Working with Multiple Message Brokers
+
+Chirp is designed to support multiple message broker implementations. This can be useful in scenarios like:
+
+- Migrating from one messaging system to another
+- Creating hybrid systems with different messaging needs
+- Publishing to multiple brokers for redundancy
+- Consuming messages from different sources
+
+Currently, the library has a fully implemented RabbitMQ provider, with other providers planned for future releases. 
+Once additional providers are implemented, you'll be able to use them by registering the appropriate connections and event buses.
+
+To manually register multiple event bus instances (once additional providers are implemented):
+```csharp
+// Register the default event bus (RabbitMQ)
 services.AddChirp(options =>
 {
     options.EventBusType = EventBusType.RabbitMQ;
-    options.QueueName = "rabbitmq_queue";
+    options.QueueName = "primary_queue";
 });
 
-// Add Redis (when implemented)
-services.AddChirpRedis(options =>
+// Example of how you might register additional event buses in the future
+// Note: This is for illustration purposes only and will work when other providers are implemented
+/*
+// Register Redis connection
+services.AddSingleton<IRedisConnection>(sp => 
 {
-    options.ChannelName = "redis_channel";
+    // Configure Redis connection
+    return new RedisConnection(configuration);
 });
+
+// Register another event bus
+services.AddSingleton<IEventBus>(serviceProvider => 
+{
+    return EventBusFactory.Create(
+        EventBusType.Redis, 
+        serviceProvider,
+        configuration,
+        "redis-channel"
+    );
+});
+*/
 ```
+#### Planned Features for Multi-Broker Support
+
+- Message routing based on event type
+- Automatic failover between brokers
+- Unified configuration for multiple brokers
+- Message synchronization between different broker types
 
 ## Supported Message Brokers
 
-| Provider | Status | Configuration Section |
-|----------|--------|------------------------|
-| RabbitMQ | ? Implemented | `RMQ` |
-| Kafka | ?? Planned | `Kafka` |
-| Redis | ?? Planned | `Redis` |
-| Azure Service Bus | ?? Planned | `AzureServiceBus` |
-| Amazon SQS | ?? Planned | `AWS:SQS` |
-| NATS | ?? Planned | `NATS` |
-| Google PubSub | ?? Planned | `GooglePubSub` |
+| Provider                 | Status          | Configuration Section    |
+| :----------------------- | :-------------: | :----------------------- |
+|  **RabbitMQ**            | ✅ Implemented | ``RMQ``                  |
+| **Kafka**                |  Planned        | ``Kafka``                |
+| **Redis**                |  Planned        | ``Redis``                |
+| **Azure Service Bus**    | Planned         | ``AzureServiceBus``      |
+| **Amazon SQS**           | Planned         | ``AWS:SQS``              |
+| **NATS**                 | Planned         | ``NATS``                 |
+| **Google Pub/Sub**       | Planned         | ``GooglePubSub``         |
+
 
 ## Contributing
 
@@ -190,7 +213,3 @@ Contributions are welcome! Feel free to submit a Pull Request.
 ## License
 
 This project is licensed under the MIT License - see the LICENSE file for details.
-
-## Author
-
-Created by [Andrew Eberle](https://github.com/andreweberle)

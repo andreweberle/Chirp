@@ -9,12 +9,70 @@ using Chirp.Infrastructure.EventBus.GooglePubSub;
 using Chirp.Infrastructure.EventBus.NATS;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using RabbitMQ.Client;
+using System;
+using System.Linq;
+using Chirp.Domain.Common;
 
 namespace Chirp.Infrastructure;
 
 public static class DependencyInjection
 {
+    /// <summary>
+    /// Adds Chirp messaging services to the service collection with a fluent configuration API
+    /// </summary>
+    /// <param name="services">The service collection</param>
+    /// <param name="configureOptions">Action to configure options</param>
+    /// <param name="configuration">The configuration (required)</param>
+    /// <returns>The service collection</returns>
+    public static IServiceCollection AddChirp(
+        this IServiceCollection services,
+        Action<ChirpOptions> configureOptions,
+        IConfiguration configuration)
+    {
+        if (configuration != null)
+        {
+            ChirpOptions options = new ChirpOptions();
+            configureOptions(options);
+
+            // Register event bus using options
+            return AddEventBus(
+                services,
+                configuration,
+                options.QueueName,
+                options.EventBusType,
+                options.RetryCount);
+        }
+
+        // Create and configure options
+        throw new ArgumentNullException(nameof(configuration));
+    }
+
+    /// <summary>
+    /// Adds Chirp messaging services to the service collection with a fluent configuration API
+    /// </summary>
+    /// <param name="services">The service collection</param>
+    /// <param name="configureOptions">Action to configure options</param>
+    /// <returns>The service collection</returns>
+    public static IServiceCollection AddChirp(
+        this IServiceCollection services,
+        Action<ChirpOptions> configureOptions)
+    {
+        // Get IConfiguration from service descriptors directly
+        var configDescriptor = services.FirstOrDefault(d => 
+            d.ServiceType == typeof(IConfiguration));
+            
+        if (configDescriptor?.ImplementationInstance is IConfiguration configuration)
+        {
+            return AddChirp(services, configureOptions, configuration);
+        }
+        
+        throw new InvalidOperationException(
+            "IConfiguration is not registered in the service collection. " +
+            "Please register IConfiguration before calling AddChirp or use the overload that accepts IConfiguration.");
+    }
+
     /// <summary>
     /// Adds event bus services to the service collection
     /// </summary>
@@ -24,7 +82,7 @@ public static class DependencyInjection
     /// <param name="eventBusType">The event bus type to use</param>
     /// <param name="retryCount">Number of retries for processing events</param>
     /// <returns>The service collection</returns>
-    public static IServiceCollection AddEventBus(
+    private static IServiceCollection AddEventBus(
         this IServiceCollection services,
         IConfiguration configuration,
         string queueOrTopicName,
