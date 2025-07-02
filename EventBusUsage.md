@@ -5,6 +5,7 @@
 Chirp now supports automatic registration and subscription of event consumers using the `AddConsumer<T>` method. This eliminates the need to manually add each handler as a transient service or manually subscribe them.
 
 ### Register your event bus and handlers
+```csharp
 // In your startup or program.cs
 services.AddChirp(options =>
 {
@@ -17,11 +18,13 @@ services.AddChirp(options =>
     options.AddConsumer<PaymentReceivedEventHandler>();
     options.AddConsumer<ShipmentReadyEventHandler>();
 });
+```
 That's it! No additional setup is required. The event handlers will be automatically subscribed to the event bus when it's first resolved from the service provider.
 
 ## Creating Event Handlers
 
 Event handlers should implement the `IIntegrationEventHandler<T>` interface:
+```csharp
 public class OrderCreatedEventHandler : IIntegrationEventHandler<OrderCreatedEvent>
 {
     private readonly IOrderService _orderService;
@@ -37,6 +40,7 @@ public class OrderCreatedEventHandler : IIntegrationEventHandler<OrderCreatedEve
         await _orderService.ProcessNewOrder(@event.OrderId);
     }
 }
+```
 ## Benefits of using AddConsumer<T>
 
 1. **Simplified Registration**: No need to manually register each handler as a transient service.
@@ -47,6 +51,7 @@ public class OrderCreatedEventHandler : IIntegrationEventHandler<OrderCreatedEve
 ## Example with Multiple Events per Handler
 
 A single handler can handle multiple event types by implementing multiple interfaces:
+```csharp
 public class OrderProcessingHandler : 
     IIntegrationEventHandler<OrderCreatedEvent>,
     IIntegrationEventHandler<OrderUpdatedEvent>,
@@ -69,13 +74,18 @@ public class OrderProcessingHandler :
         // Handle order cancellation
     }
 }
+```
 Register it once and it will be subscribed to all event types:
+```csharp
 options.AddConsumer<OrderProcessingHandler>();
+```
 ## Advanced Configuration
 
 For more advanced scenarios, you can still access the underlying event bus directly:
+```csharp
 // Get the event bus
 var eventBus = serviceProvider.GetRequiredService<IEventBus>();
 
 // Publish an event
 eventBus.Publish(new OrderCreatedEvent { OrderId = "12345" });
+```
