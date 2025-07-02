@@ -32,6 +32,7 @@ public class RabbitMqEventBus : EventBusBase
     private readonly IRabbitMqConnection _rabbitMQConnection;
     private readonly int _retryMax;
     private IModel _consumerChannel;
+    private readonly object _lockObject = new object();
 
     /// <summary>
     /// Initializes a new instance of RabbitMQEventBus
@@ -150,10 +151,23 @@ public class RabbitMqEventBus : EventBusBase
     /// </summary>
     private void StartConsume()
     {
-        if (_consumerChannel == null) return;
-        AsyncEventingBasicConsumer consumer = new(_consumerChannel);
-        consumer.Received += Consumer_Received;
-        _consumerChannel.BasicConsume(_queueName, false, consumer);
+        lock (_lockObject)
+        {
+            if (_consumerChannel == null) return;
+            
+            try
+            {
+                AsyncEventingBasicConsumer consumer = new(_consumerChannel);
+                consumer.Received += Consumer_Received;
+                _consumerChannel.BasicConsume(_queueName, false, consumer);
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error starting consume: {ex.Message}");
+                // Try to recreate channel on exception
+                _consumerChannel = CreateConsumerChannel();
+            }
+        }
     }
 
     /// <summary>
@@ -274,8 +288,11 @@ public class RabbitMqEventBus : EventBusBase
             object? handler = scope.ServiceProvider.GetService(subscription.HandlerType);
             if (handler == null) continue;
 
-            Type? eventType = SubscriptionsManager.GetEventTypeByName(eventName)
-                              ?? throw new Exception($"Unable To Get EventType For ${eventName}");
+            Type? eventType = SubscriptionsManager.GetEventTypeByName(eventName);
+            if (eventType == null)
+            {
+                throw new Exception($"Unable To Get EventType For {eventName}");
+            }
 
             object? integrationEvent = null;
 
@@ -288,10 +305,23 @@ public class RabbitMqEventBus : EventBusBase
                 integrationEvent = JsonSerializer.Deserialize(message, eventType);
             }
 
-            Type concreteType = typeof(IIntegrationEventHandler<>).MakeGenericType(eventType);
+            if (integrationEvent == null)
+            {
+                throw new Exception($"Failed to deserialize message for event type {eventType.Name}");
+            }
 
-            await Task.Yield();
-            await (Task)concreteType.GetMethod("Handle").Invoke(handler, [integrationEvent]);
+            Type concreteType = typeof(IIntegrationEventHandler<>).MakeGenericType(eventType);
+            var handleMethod = concreteType.GetMethod("Handle");
+            
+            if (handleMethod != null)
+            {
+                await Task.Yield();
+                await (Task)handleMethod.Invoke(handler, new[] { integrationEvent })!;
+            }
+            else
+            {
+                throw new Exception($"Handle method not found on handler {handler.GetType().Name}");
+            }
         }
     }
 
@@ -300,19 +330,62 @@ public class RabbitMqEventBus : EventBusBase
     /// </summary>
     private IModel CreateConsumerChannel()
     {
-        if (!_rabbitMQConnection.IsConnected) _rabbitMQConnection.TryConnect();
-
-        IModel channel = _rabbitMQConnection.CreateModel();
-
-        channel.ExchangeDeclare(ExchangeName, ExchangeType.Direct, true);
-        channel.QueueDeclare(_queueName, true, false, false, null);
-        channel.CallbackException += (sender, ea) =>
+        lock (_lockObject)
         {
-            _consumerChannel.Dispose();
-            _consumerChannel = CreateConsumerChannel();
-            StartConsume();
-        };
+            if (!_rabbitMQConnection.IsConnected) _rabbitMQConnection.TryConnect();
 
-        return channel;
+            IModel channel = _rabbitMQConnection.CreateModel();
+
+            channel.ExchangeDeclare(ExchangeName, ExchangeType.Direct, true);
+            channel.QueueDeclare(_queueName, true, false, false, null);
+            
+            // Improved exception handling for channel callbacks
+            channel.CallbackException += (sender, ea) =>
+            {
+                try
+                {
+                    Console.WriteLine($"RabbitMQ channel exception: {ea.Exception.Message}");
+                    
+                    // Safely dispose the existing channel
+                    IModel oldChannel = _consumerChannel;
+                    _consumerChannel = null; // Prevent reuse
+
+                    try 
+                    {
+                        if (oldChannel?.IsOpen == true)
+                        {
+                            oldChannel.Close();
+                        }
+                        oldChannel?.Dispose();
+                    }
+                    catch (Exception disposeEx)
+                    {
+                        Console.WriteLine($"Error disposing channel: {disposeEx.Message}");
+                    }
+                    
+                    // Wait a brief moment before reconnecting
+                    Task.Delay(500).Wait();
+                    
+                    // Try to connect and check if successful
+                    if (!_rabbitMQConnection.IsConnected)
+                    {
+                        _rabbitMQConnection.TryConnect();
+                    }
+                    
+                    // Only proceed if connection is established
+                    if (_rabbitMQConnection.IsConnected)
+                    {
+                        _consumerChannel = CreateConsumerChannel();
+                        StartConsume();
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"Error recreating consumer channel: {ex.Message}");
+                }
+            };
+
+            return channel;
+        }
     }
 }

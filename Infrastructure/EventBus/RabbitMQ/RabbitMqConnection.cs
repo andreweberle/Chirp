@@ -11,7 +11,7 @@ namespace Chirp.Infrastructure.EventBus.RabbitMQ;
 /// </summary>
 internal class RabbitMqConnection(IConnectionFactory connectionFactory) : IRabbitMqConnection, IDisposable
 {
-    private static readonly Policy _policy = Policy
+    private static readonly Policy Policy = Policy
         .Handle<Exception>()
         .WaitAndRetry(10, retryAttempt => TimeSpan.FromSeconds(Math.Pow(2, retryAttempt)),
             (ex, time) =>
@@ -40,7 +40,7 @@ internal class RabbitMqConnection(IConnectionFactory connectionFactory) : IRabbi
     /// Creates a channel model for communication with RabbitMQ
     /// </summary>
     public IModel CreateModel()
-    {
+     {
         if (!IsConnected) TryConnect();
         return _connection?.CreateModel()!;
     }
@@ -53,7 +53,7 @@ internal class RabbitMqConnection(IConnectionFactory connectionFactory) : IRabbi
         lock (_lockSync)
         {
             // Execute the policy.
-            _policy.Execute(() =>
+            Policy.Execute(() =>
             {
                 try
                 {
