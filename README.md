@@ -31,7 +31,9 @@ Chirp is a flexible, provider-agnostic messaging library that simplifies publish
 
 ### Configuration
 
-Add the necessary configuration to your `appsettings.json`:{
+Add the necessary configuration to your `appsettings.json`:
+```json
+{
   "RMQ": {
     "Host": "localhost",
     "Port": 5672,
@@ -40,8 +42,12 @@ Add the necessary configuration to your `appsettings.json`:{
     "ExchangeName": "chirp_exchange",
     "ExchangeNameDLX": "chirp_dlx_exchange"
   }
-}### Setting Up Dependencies
+}
+```
+
+### Setting Up Dependencies
 Register the required dependencies in your `Program.cs` or `Startup.cs`:using Chirp.Infrastructure;
+```csharp
 using Chirp.Infrastructure.EventBus;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -56,10 +62,14 @@ services.AddChirp(options =>
     // Register event handlers - they'll be automatically subscribed
     options.AddConsumer<OrderCreatedEventHandler>();
     options.AddConsumer<PaymentReceivedEventHandler>();
-});### Creating Events
+});
+```
 
-Create event classes that inherit from `IntegrationEvent`:using Chirp.Domain.Common;
+### Creating Events
 
+Create event classes that inherit from `IntegrationEvent`:
+```csharp
+using Chirp.Domain.Common;
 public record OrderCreatedEvent(int OrderId, string CustomerName, decimal Total) : IntegrationEvent;### Creating Event Handlers
 
 Create handlers that implement `IIntegrationEventHandler<T>`:using Chirp.Application.Interfaces;
@@ -72,8 +82,11 @@ public class OrderCreatedEventHandler : IIntegrationEventHandler<OrderCreatedEve
         Console.WriteLine($"Order {event.OrderId} created for {event.CustomerName} with total {event.Total}");
         await Task.CompletedTask;
     }
-}### Publishing Events
+}
+```
 
+### Publishing Events
+```csharp
 Inject `IEventBus` and publish events:public class OrderService
 {
     private readonly IEventBus _eventBus;
@@ -89,16 +102,22 @@ Inject `IEventBus` and publish events:public class OrderService
         var orderCreatedEvent = new OrderCreatedEvent(orderId, customerName, total);
         _eventBus.Publish(orderCreatedEvent);
     }
-}## Advanced Usage
+}
+```
+
+## Advanced Usage
 
 ### Using the Event Bus Factory
-
-You can also use the `EventBusFactory` to create an instance of the event bus:IEventBus eventBus = EventBusFactory.Create(
+You can also use the `EventBusFactory` to create an instance of the event bus:
+```csharp
+IEventBus eventBus = EventBusFactory.Create(
     EventBusType.RabbitMQ,
     serviceProvider,
     configuration,
     "my_service_queue",
     retryCount: 5);
+```
+
 ### Working with Multiple Message Brokers
 
 Chirp is designed to support multiple message broker implementations. This can be useful in scenarios like:
@@ -111,7 +130,9 @@ Chirp is designed to support multiple message broker implementations. This can b
 Currently, the library has a fully implemented RabbitMQ provider, with other providers planned for future releases. 
 Once additional providers are implemented, you'll be able to use them by registering the appropriate connections and event buses.
 
-To manually register multiple event bus instances (once additional providers are implemented):// Register the default event bus (RabbitMQ)
+To manually register multiple event bus instances (once additional providers are implemented):
+```csharp
+// Register the default event bus (RabbitMQ)
 services.AddChirp(options =>
 {
     options.EventBusType = EventBusType.RabbitMQ;
@@ -138,7 +159,9 @@ services.AddSingleton<IEventBus>(serviceProvider =>
         "redis-channel"
     );
 });
-*/#### Planned Features for Multi-Broker Support
+*/
+```
+#### Planned Features for Multi-Broker Support
 
 - Message routing based on event type
 - Automatic failover between brokers
