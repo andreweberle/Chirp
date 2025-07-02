@@ -29,4 +29,8 @@
 		<Using Include="Moq" />
 	</ItemGroup>
 
+	<ItemGroup>
+	  <Folder Include="RabbitMQ\" />
+	</ItemGroup>
+
 </Project>
