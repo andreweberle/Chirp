@@ -1,10 +1,26 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
-  <PropertyGroup>
-    <TargetFramework>net9.0</TargetFramework>
-    <ImplicitUsings>enable</ImplicitUsings>
-    <Nullable>enable</Nullable>
-  </PropertyGroup>
+	<PropertyGroup>
+		<TargetFramework>net9.0</TargetFramework>
+		<ImplicitUsings>enable</ImplicitUsings>
+		<Nullable>enable</Nullable>
+		<PackageId>Chirp</PackageId>
+		<Authors>Andrew Eberle</Authors>
+		<RepositoryUrl>https://github.com/andreweberle/Chirp</RepositoryUrl>
+		<PackageDescription>
+			This library provides a simple way to publish and consume messages.
+		</PackageDescription>
+		<GenerateAssemblyInfo>false</GenerateAssemblyInfo>
+		<Deterministic>False</Deterministic>
+		<Version>1.0.0</Version>
+
+		<PackageTags>messaging rabbitmq kafka redis azure-service-bus amazon-sqs nats google-pubsub event-bus</PackageTags>
+		<PackageProjectUrl>https://github.com/andreweberle/Chirp</PackageProjectUrl>
+		<PackageLicenseExpression>MIT</PackageLicenseExpression>
+		<Title>Chirp - Messaging Library</Title>
+		<Description>A flexible messaging library supporting multiple message brokers including RabbitMQ, Kafka, Redis, Azure Service Bus, Amazon SQS, NATS, and Google PubSub.</Description>
+		<PackageReadmeFile>README.md</PackageReadmeFile>
+	</PropertyGroup>
 
   <ItemGroup>
     <Compile Remove="tests\**" />
