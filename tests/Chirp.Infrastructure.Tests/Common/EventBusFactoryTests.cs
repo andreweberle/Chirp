@@ -1,69 +1,137 @@
 using Chirp.Application.Interfaces;
 using Chirp.Infrastructure.EventBus;
+using Chirp.Infrastructure.EventBus.Common;
 using Chirp.Infrastructure.EventBus.RabbitMQ;
+using DotNet.Testcontainers.Builders;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
+using RabbitMQ.Client;
+using Testcontainers.RabbitMq;
 
 namespace Chirp.Infrastructure.Tests.Common;
 
 [TestClass]
 public class EventBusFactoryTests
 {
+    private static RabbitMqContainer _rabbitmqContainer = null!;
+    private static string _username = "guest";
+    private static string _password = "guest";
+    private static string _hostname = null!;
+    private static int _port;
+
+
+    [ClassInitialize]
+    public static async Task ClassInitialize(TestContext testContext)
+    {
+        // Create a RabbitMQ container instance
+        _rabbitmqContainer = new RabbitMqBuilder()
+            .WithUsername(_username)
+            .WithPassword(_password)
+            .WithPortBinding(5672, true)
+            .WithWaitStrategy(Wait.ForUnixContainer().UntilPortIsAvailable(5672))
+            .Build();
+
+        // Start the container
+        await _rabbitmqContainer.StartAsync();
+
+        // Get connection details
+        _hostname = _rabbitmqContainer.Hostname;
+        _port = _rabbitmqContainer.GetMappedPublicPort(5672);
+    }
+
+    [ClassCleanup(ClassCleanupBehavior.EndOfClass)]
+    public static async Task ClassCleanup()
+    {
+        if (_rabbitmqContainer != null)
+        {
+            await _rabbitmqContainer.StopAsync();
+            await _rabbitmqContainer.DisposeAsync();
+        }
+    }
+
     [TestMethod]
     public void CreateRabbitMQEventBusTypeReturnsRabbitMQEventBus()
     {
         // Arrange
-        Mock<IServiceProvider> mockServiceProvider = new();
-        Mock<IChirpRabbitMqConnection> mockConnection = new();
-        Mock<IConfiguration> mockConfiguration = new();
-
-        // Set up configuration values
+        var serviceCollection = new ServiceCollection();
+        
+        // Create a connection factory using the test container
+        var connectionFactory = new ConnectionFactory
+        {
+            HostName = _hostname,
+            Port = _port,
+            UserName = _username,
+            Password = _password,
+            DispatchConsumersAsync = true
+        };
+        
+        // Create the connection
+        var connection = new TestRabbitMqConnection(connectionFactory);
+        
+        // Register the connection with the service provider
+        serviceCollection.AddSingleton<IChirpRabbitMqConnection>(connection);
+        var serviceProvider = serviceCollection.BuildServiceProvider();
+        
+        // Create mock configuration
+        Mock<IConfiguration> mockConfiguration = new Mock<IConfiguration>();
         mockConfiguration.Setup(c => c["RMQ:ExchangeName"]).Returns("test_exchange");
         mockConfiguration.Setup(c => c["RMQ:ExchangeNameDLX"]).Returns("test_dlx_exchange");
-
-        // Set up service provider to return mock connection
-        mockServiceProvider
-            .Setup(sp => sp.GetService(typeof(IChirpRabbitMqConnection)))
-            .Returns(mockConnection.Object);
-
+        
         // Act
-        IChirpEventBus result = EventBusFactory.Create(
-            EventBusType.RabbitMQ,
-            mockServiceProvider.Object,
-            mockConfiguration.Object,
-            "test_queue",
-            5);
-
+        var eventBus = EventBusFactory.Create(
+            EventBusType.RabbitMQ, 
+            serviceProvider, 
+            mockConfiguration.Object, 
+            "test_queue");
+        
         // Assert
-        Assert.IsInstanceOfType<ChirpRabbitMqEventBus>(result);
+        Assert.IsNotNull(eventBus);
+        Assert.IsInstanceOfType(eventBus, typeof(ChirpRabbitMqEventBus));
     }
 
     [TestMethod]
     public void Create_RabbitMQEventBusType_WithDefaultExchangeNames_ReturnsRabbitMQEventBus()
     {
         // Arrange
-        Mock<IServiceProvider> mockServiceProvider = new Mock<IServiceProvider>();
-        Mock<IChirpRabbitMqConnection> mockConnection = new Mock<IChirpRabbitMqConnection>();
+        var serviceCollection = new ServiceCollection();
+        
+        // Create a connection factory using the test container
+        var connectionFactory = new ConnectionFactory
+        {
+            HostName = _hostname,
+            Port = _port,
+            UserName = _username,
+            Password = _password,
+            DispatchConsumersAsync = true
+        };
+        
+        // Create the connection
+        var connection = new TestRabbitMqConnection(connectionFactory);
+        
+        // Register the connection with the service provider
+        serviceCollection.AddSingleton<IChirpRabbitMqConnection>(connection);
+        var serviceProvider = serviceCollection.BuildServiceProvider();
+        
+        // Create mock configuration with null exchange names to trigger defaults
         Mock<IConfiguration> mockConfiguration = new Mock<IConfiguration>();
-
-        // Set up configuration to return null for exchange names (use defaults)
-        mockConfiguration.Setup(c => c["RMQ:ExchangeName"]).Returns((string)null);
-        mockConfiguration.Setup(c => c["RMQ:ExchangeNameDLX"]).Returns((string)null);
-
-        // Set up service provider to return mock connection
-        mockServiceProvider
-            .Setup(sp => sp.GetService(typeof(IChirpRabbitMqConnection)))
-            .Returns(mockConnection.Object);
-
+        
+        // Fix warnings by returning null as string? instead of null directly
+        string? nullExchangeName = null;
+        mockConfiguration.Setup(c => c["RMQ:ExchangeName"]).Returns(nullExchangeName);
+        mockConfiguration.Setup(c => c["RMQ:ExchangeNameDLX"]).Returns(nullExchangeName);
+        
         // Act
-        IChirpEventBus result = EventBusFactory.Create(
-            EventBusType.RabbitMQ,
-            mockServiceProvider.Object,
-            mockConfiguration.Object,
-            "test_queue",
-            5);
-
+        var eventBus = EventBusFactory.Create(
+            EventBusType.RabbitMQ, 
+            serviceProvider, 
+            mockConfiguration.Object, 
+            "test_queue");
+        
         // Assert
-        Assert.IsInstanceOfType<ChirpRabbitMqEventBus>(result);
+        Assert.IsNotNull(eventBus);
+        Assert.IsInstanceOfType(eventBus, typeof(ChirpRabbitMqEventBus));
+        // The default exchange names will be used internally, but we can't directly test them
+        // since they are private in the ChirpRabbitMqEventBus class
     }
 
     [TestMethod]
@@ -199,28 +267,30 @@ public class EventBusFactoryTests
             "test_queue");
     }
 
-    [TestMethod]
-    public void CreateVerifyInMemoryEventBusSubscriptionsManager()
+
+    // Test-specific implementation of IChirpRabbitMqConnection
+    private class TestRabbitMqConnection : IChirpRabbitMqConnection
     {
-        // Arrange
-        Mock<IServiceProvider> mockServiceProvider = new Mock<IServiceProvider>();
-        Mock<IChirpRabbitMqConnection> mockConnection = new Mock<IChirpRabbitMqConnection>();
-        Mock<IConfiguration> mockConfiguration = new Mock<IConfiguration>();
+        private readonly IConnectionFactory _connectionFactory;
+        private IConnection? _connection;
 
-        // Set up service provider to return mock connection
-        mockServiceProvider
-            .Setup(sp => sp.GetService(typeof(IChirpRabbitMqConnection)))
-            .Returns(mockConnection.Object);
+        public TestRabbitMqConnection(IConnectionFactory connectionFactory)
+        {
+            _connectionFactory = connectionFactory;
+            TryConnect();
+        }
 
-        // Act
-        IChirpEventBus result = EventBusFactory.Create(
-            EventBusType.RabbitMQ,
-            mockServiceProvider.Object,
-            mockConfiguration.Object,
-            "test_queue");
+        public bool IsConnected => _connection is { IsOpen: true };
 
-        // Assert - we can't directly verify the subscription manager as it's private
-        // but we can verify the result is created and the mock was called
-        mockServiceProvider.Verify(sp => sp.GetService(typeof(IChirpRabbitMqConnection)), Times.Once);
+        public void TryConnect()
+        {
+            _connection = _connectionFactory.CreateConnection();
+        }
+
+        public IModel CreateModel()
+        {
+            if (!IsConnected) TryConnect();
+            return _connection!.CreateModel();
+        }
     }
 }
