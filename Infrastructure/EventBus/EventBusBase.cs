@@ -6,10 +6,10 @@ namespace Chirp.Infrastructure.EventBus;
 /// <summary>
 /// Abstract base class for event bus implementations to share common functionality
 /// </summary>
-public abstract class EventBusBase(IEventBusSubscriptionsManager subscriptionsManager, IServiceProvider serviceProvider)
-    : IEventBus
+public abstract class EventBusBase(IChirpEventBusSubscriptionsManager subscriptionsManager, IServiceProvider serviceProvider)
+    : IChirpEventBus
 {
-    protected readonly IEventBusSubscriptionsManager SubscriptionsManager =
+    protected readonly IChirpEventBusSubscriptionsManager SubscriptionsManager =
         subscriptionsManager ?? throw new ArgumentNullException(nameof(subscriptionsManager));
 
     protected readonly IServiceProvider ServiceProvider =
@@ -28,5 +28,5 @@ public abstract class EventBusBase(IEventBusSubscriptionsManager subscriptionsMa
     /// <typeparam name="TH">The event handler type</typeparam>
     public abstract void Subscribe<T, TH>()
         where T : IntegrationEvent
-        where TH : IIntegrationEventHandler<T>;
+        where TH : IChirpIntegrationEventHandler<T>;
 }

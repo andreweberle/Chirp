@@ -67,7 +67,7 @@ public static class EventBusFactory
     /// <param name="queueName">The queue name</param>
     /// <param name="retryCount">Number of retries for processing events</param>
     /// <returns>An event bus implementation</returns>
-    public static IEventBus Create(
+    public static IChirpEventBus Create(
         EventBusType eventBusType,
         IServiceProvider serviceProvider,
         IConfiguration configuration,
@@ -75,7 +75,7 @@ public static class EventBusFactory
         int retryCount = 5)
     {
         // Create a subscription manager to be used by the event bus
-        IEventBusSubscriptionsManager subscriptionsManager = new InMemoryEventBusSubscriptionsManager();
+        IChirpEventBusSubscriptionsManager subscriptionsManager = new InMemoryEventBusSubscriptionsManager();
 
         return eventBusType switch
         {
@@ -108,15 +108,15 @@ public static class EventBusFactory
         };
     }
 
-    private static RabbitMqEventBus CreateRabbitMQEventBus(
+    private static ChirpRabbitMqEventBus CreateRabbitMQEventBus(
         IServiceProvider serviceProvider,
-        IEventBusSubscriptionsManager subscriptionsManager,
+        IChirpEventBusSubscriptionsManager subscriptionsManager,
         IConfiguration configuration,
         string queueName,
         int retryCount)
     {
         // Get the RabbitMQ connection
-        IRabbitMqConnection connection = serviceProvider.GetService(typeof(IRabbitMqConnection)) as IRabbitMqConnection
+        IChirpRabbitMqConnection connection = serviceProvider.GetService(typeof(IChirpRabbitMqConnection)) as IChirpRabbitMqConnection
                                          ?? throw new InvalidOperationException(
                                              "RabbitMQ connection not registered in service provider");
 
@@ -125,7 +125,7 @@ public static class EventBusFactory
         string dlxExchangeName = configuration["RMQ:ExchangeNameDLX"] ?? "_dlxExchangeName";
 
         // Create the RabbitMQ event bus
-        return new RabbitMqEventBus(
+        return new ChirpRabbitMqEventBus(
             connection,
             serviceProvider,
             subscriptionsManager,
@@ -139,7 +139,7 @@ public static class EventBusFactory
     // Example implementation for when Kafka is ready
     private static KafkaEventBus CreateKafkaEventBus(
         IServiceProvider serviceProvider,
-        IEventBusSubscriptionsManager subscriptionsManager,
+        IChirpEventBusSubscriptionsManager subscriptionsManager,
         IConfiguration configuration,
         string topicName,
         int retryCount)
@@ -161,7 +161,7 @@ public static class EventBusFactory
     // Example implementation for Azure Service Bus
     private static AzureServiceBusEventBus CreateAzureServiceBusEventBus(
         IServiceProvider serviceProvider,
-        IEventBusSubscriptionsManager subscriptionsManager,
+        IChirpEventBusSubscriptionsManager subscriptionsManager,
         IConfiguration configuration,
         string queueName,
         int retryCount)
@@ -183,7 +183,7 @@ public static class EventBusFactory
     // Example implementation for Amazon SQS
     private static AmazonSqsEventBus CreateAmazonSQSEventBus(
         IServiceProvider serviceProvider,
-        IEventBusSubscriptionsManager subscriptionsManager,
+        IChirpEventBusSubscriptionsManager subscriptionsManager,
         IConfiguration configuration,
         string queueName,
         int retryCount)
@@ -210,7 +210,7 @@ public static class EventBusFactory
     // Example implementation for Redis
     private static RedisEventBus CreateRedisEventBus(
         IServiceProvider serviceProvider,
-        IEventBusSubscriptionsManager subscriptionsManager,
+        IChirpEventBusSubscriptionsManager subscriptionsManager,
         IConfiguration configuration,
         string channelPrefix,
         int retryCount)
@@ -231,7 +231,7 @@ public static class EventBusFactory
     // Example implementation for Google Cloud Pub/Sub
     private static GooglePubSubEventBus CreateGooglePubSubEventBus(
         IServiceProvider serviceProvider,
-        IEventBusSubscriptionsManager subscriptionsManager,
+        IChirpEventBusSubscriptionsManager subscriptionsManager,
         IConfiguration configuration,
         string topicPrefix,
         int retryCount)
@@ -258,7 +258,7 @@ public static class EventBusFactory
     // Example implementation for NATS
     private static NATSEventBus CreateNATSEventBus(
         IServiceProvider serviceProvider,
-        IEventBusSubscriptionsManager subscriptionsManager,
+        IChirpEventBusSubscriptionsManager subscriptionsManager,
         IConfiguration configuration,
         string subjectPrefix,
         int retryCount)

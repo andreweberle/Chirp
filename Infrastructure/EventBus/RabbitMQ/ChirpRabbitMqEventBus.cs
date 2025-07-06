@@ -13,7 +13,7 @@ namespace Chirp.Infrastructure.EventBus.RabbitMQ;
 /// <summary>
 /// RabbitMQ implementation of the event bus
 /// </summary>
-public class RabbitMqEventBus : EventBusBase
+public class ChirpRabbitMqEventBus : EventBusBase
 {
     private const string BrokerName = "chirp_event_bus";
 
@@ -29,7 +29,7 @@ public class RabbitMqEventBus : EventBusBase
 
     private readonly string _dlxQueueName;
     private readonly string? _queueName;
-    private readonly IRabbitMqConnection _rabbitMQConnection;
+    private readonly IChirpRabbitMqConnection _rabbitMQConnection;
     private readonly int _retryMax;
     private IModel _consumerChannel;
     private readonly object _lockObject = new object();
@@ -45,10 +45,10 @@ public class RabbitMqEventBus : EventBusBase
     /// <param name="exchangeName">The exchange name</param>
     /// <param name="dlxExchangeName">Dead letter exchange name</param>
     /// <exception cref="ArgumentNullException"></exception>
-    public RabbitMqEventBus(
-        IRabbitMqConnection rabbitMQConnection,
+    public ChirpRabbitMqEventBus(
+        IChirpRabbitMqConnection rabbitMQConnection,
         IServiceProvider serviceProvider,
-        IEventBusSubscriptionsManager eventBusSubscriptionsManager,
+        IChirpEventBusSubscriptionsManager eventBusSubscriptionsManager,
         string? queueName = null,
         int retryMax = 5,
         string exchangeName = BrokerName,
@@ -310,7 +310,7 @@ public class RabbitMqEventBus : EventBusBase
                 throw new Exception($"Failed to deserialize message for event type {eventType.Name}");
             }
 
-            Type concreteType = typeof(IIntegrationEventHandler<>).MakeGenericType(eventType);
+            Type concreteType = typeof(IChirpIntegrationEventHandler<>).MakeGenericType(eventType);
             var handleMethod = concreteType.GetMethod("Handle");
             
             if (handleMethod != null)

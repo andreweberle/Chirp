@@ -36,7 +36,7 @@ public class GooglePubSubEventBus : EventBusBase
     public GooglePubSubEventBus(
         IGooglePubSubConnection pubSubConnection,
         IServiceProvider serviceProvider,
-        IEventBusSubscriptionsManager eventBusSubscriptionsManager,
+        IChirpEventBusSubscriptionsManager eventBusSubscriptionsManager,
         string topicPrefix,
         string subscriptionIdPrefix)
         : base(eventBusSubscriptionsManager, serviceProvider)

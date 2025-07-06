@@ -37,7 +37,7 @@ public class AmazonSqsEventBus : EventBusBase
     public AmazonSqsEventBus(
         IAmazonSQSConnection sqsConnection,
         IServiceProvider serviceProvider,
-        IEventBusSubscriptionsManager eventBusSubscriptionsManager,
+        IChirpEventBusSubscriptionsManager eventBusSubscriptionsManager,
         string queueUrl,
         string deadLetterQueueUrl,
         int retryMax = 5)

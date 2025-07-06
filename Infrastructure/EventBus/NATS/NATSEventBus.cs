@@ -34,7 +34,7 @@ public class NATSEventBus : EventBusBase
     public NATSEventBus(
         INATSConnection natsConnection,
         IServiceProvider serviceProvider,
-        IEventBusSubscriptionsManager eventBusSubscriptionsManager,
+        IChirpEventBusSubscriptionsManager eventBusSubscriptionsManager,
         string subjectPrefix,
         string queueGroup = null)
         : base(eventBusSubscriptionsManager, serviceProvider)

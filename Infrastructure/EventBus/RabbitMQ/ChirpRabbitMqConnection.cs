@@ -9,7 +9,7 @@ namespace Chirp.Infrastructure.EventBus.RabbitMQ;
 /// <summary>
 /// Implementation of IRabbitMqConnection that manages connection to RabbitMQ
 /// </summary>
-internal class RabbitMqConnection(IConnectionFactory connectionFactory) : IRabbitMqConnection, IDisposable
+internal class ChirpRabbitMqConnection(IConnectionFactory connectionFactory) : IChirpRabbitMqConnection, IDisposable
 {
     private static readonly Policy Policy = Policy
         .Handle<Exception>()

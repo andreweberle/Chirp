@@ -6,7 +6,7 @@ namespace Chirp.Infrastructure.EventBus.Common;
 /// <summary>
 /// In-memory implementation of IEventBusSubscriptionsManager
 /// </summary>
-public class InMemoryEventBusSubscriptionsManager : IEventBusSubscriptionsManager
+public class InMemoryEventBusSubscriptionsManager : IChirpEventBusSubscriptionsManager
 {
     private readonly List<Type> _eventTypes = [];
     private readonly Dictionary<string, List<SubscriptionInfo>> _handlers = [];
@@ -21,7 +21,7 @@ public class InMemoryEventBusSubscriptionsManager : IEventBusSubscriptionsManage
 
     public void AddSubscription<T, TH>()
         where T : IntegrationEvent
-        where TH : IIntegrationEventHandler<T>
+        where TH : IChirpIntegrationEventHandler<T>
     {
         string eventName = GetEventKey<T>();
 
@@ -31,7 +31,7 @@ public class InMemoryEventBusSubscriptionsManager : IEventBusSubscriptionsManage
     }
 
     public void RemoveSubscription<T, TH>()
-        where TH : IIntegrationEventHandler<T>
+        where TH : IChirpIntegrationEventHandler<T>
         where T : IntegrationEvent
     {
         SubscriptionInfo? handlerToRemove = FindSubscriptionToRemove<T, TH>();
@@ -102,7 +102,7 @@ public class InMemoryEventBusSubscriptionsManager : IEventBusSubscriptionsManage
 
     private SubscriptionInfo? FindSubscriptionToRemove<T, TH>()
         where T : IntegrationEvent
-        where TH : IIntegrationEventHandler<T>
+        where TH : IChirpIntegrationEventHandler<T>
     {
         string eventName = GetEventKey<T>();
         return DoFindSubscriptionToRemove(eventName, typeof(TH));

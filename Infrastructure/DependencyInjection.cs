@@ -140,9 +140,9 @@ public static class DependencyInjection
         }
 
         // Register the event bus using the factory
-        services.AddSingleton<IEventBus>(sp =>
+        services.AddSingleton<IChirpEventBus>(sp =>
         {
-            var eventBus = EventBusFactory.Create(
+            IChirpEventBus eventBus = EventBusFactory.Create(
                 eventBusType,
                 sp,
                 configuration,
@@ -151,7 +151,6 @@ public static class DependencyInjection
             
             // Auto-subscribe all registered handlers
             AutoSubscribeEventHandlers(eventBus, options, sp);
-            
             return eventBus;
         });
 
@@ -166,14 +165,14 @@ public static class DependencyInjection
         this IServiceCollection services,
         IConfiguration configuration)
     {
-        services.AddSingleton<IRabbitMqConnection>(sp =>
+        services.AddSingleton<IChirpRabbitMqConnection>(sp =>
         {
             string host = configuration["RMQ:Host"] ?? throw new ArgumentNullException("RMQ:Host configuration is missing");
             string username = configuration["RMQ:Username"] ?? throw new ArgumentNullException("RMQ:Username configuration is missing");
             string password = configuration["RMQ:Password"] ?? throw new ArgumentNullException("RMQ:Password configuration is missing");
 
             IConnectionFactory connectionFactory = Domain.Common.ConnectionFactory.CreateConnectionFactory(host, username, password);
-            return new RabbitMqConnection(connectionFactory);
+            return new ChirpRabbitMqConnection(connectionFactory);
         });
 
         return services;
@@ -196,19 +195,19 @@ public static class DependencyInjection
             services.AddTransient(consumer.HandlerType);
 
             // Find all interface implementations of IIntegrationEventHandler<T>
-            foreach (var implementedInterface in consumer.HandlerType.GetInterfaces())
+            foreach (Type implementedInterface in consumer.HandlerType.GetInterfaces())
             {
                 if (!implementedInterface.IsGenericType)
                     continue;
 
-                if (implementedInterface.GetGenericTypeDefinition() != typeof(IIntegrationEventHandler<>))
+                if (implementedInterface.GetGenericTypeDefinition() != typeof(IChirpIntegrationEventHandler<>))
                     continue;
 
                 // Get the event type from the generic argument
                 Type eventType = implementedInterface.GetGenericArguments()[0];
                 
                 // Register the handler as IIntegrationEventHandler<TEvent>
-                Type handlerInterfaceType = typeof(IIntegrationEventHandler<>).MakeGenericType(eventType);
+                Type handlerInterfaceType = typeof(IChirpIntegrationEventHandler<>).MakeGenericType(eventType);
                 services.AddTransient(handlerInterfaceType, consumer.HandlerType);
             }
         }
@@ -220,40 +219,37 @@ public static class DependencyInjection
     /// <param name="eventBus">The event bus</param>
     /// <param name="options">The chirp options</param>
     /// <param name="serviceProvider">The service provider</param>
-    private static void AutoSubscribeEventHandlers(IEventBus eventBus, ChirpOptions options, IServiceProvider serviceProvider)
+    private static void AutoSubscribeEventHandlers(IChirpEventBus eventBus, ChirpOptions options, IServiceProvider serviceProvider)
     {
-        if (eventBus == null || options.Consumers.Count == 0)
+        if (options.Consumers.Count == 0)
             return;
 
         // Get the generic Subscribe<T, TH>() method
-        var subscribeMethod = typeof(IEventBus).GetMethod("Subscribe");
+        MethodInfo? subscribeMethod = typeof(IChirpEventBus).GetMethod("Subscribe");
         if (subscribeMethod == null)
         {
             Console.WriteLine("Warning: Could not find Subscribe method on IEventBus");
             return;
         }
 
-        foreach (var consumer in options.Consumers)
+        foreach (ConsumerRegistration consumer in options.Consumers)
         {
             Type handlerType = consumer.HandlerType;
 
             // Find all IIntegrationEventHandler<T> interfaces implemented by the handler
-            var eventHandlerInterfaces = handlerType.GetInterfaces()
-                .Where(i => i.IsGenericType && i.GetGenericTypeDefinition() == typeof(IIntegrationEventHandler<>))
+            List<Type> eventHandlerInterfaces = handlerType.GetInterfaces()
+                .Where(i => i.IsGenericType && i.GetGenericTypeDefinition() == typeof(IChirpIntegrationEventHandler<>))
                 .ToList();
 
-            foreach (var handlerInterface in eventHandlerInterfaces)
+            foreach (Type eventType in eventHandlerInterfaces.Select(handlerInterface => handlerInterface.GetGenericArguments()[0]))
             {
-                // Get the event type from the generic argument of IIntegrationEventHandler<T>
-                Type eventType = handlerInterface.GetGenericArguments()[0];
-
                 try
                 {
                     // Create a strongly typed Subscribe<T, TH> method with the correct generic parameters
-                    var genericSubscribeMethod = subscribeMethod.MakeGenericMethod(eventType, handlerType);
+                    MethodInfo genericSubscribeMethod = subscribeMethod.MakeGenericMethod(eventType, handlerType);
                     
                     // Invoke the Subscribe method on the event bus
-                    genericSubscribeMethod.Invoke(eventBus, Array.Empty<object>());
+                    genericSubscribeMethod.Invoke(eventBus, []);
                     
                     // Log success for debugging (can be removed in production or replaced with proper logging)
                     Console.WriteLine($"Successfully subscribed {handlerType.Name} to handle {eventType.Name} events");

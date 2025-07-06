@@ -36,7 +36,7 @@ public class AzureServiceBusEventBus : EventBusBase
     public AzureServiceBusEventBus(
         IAzureServiceBusConnection serviceBusConnection,
         IServiceProvider serviceProvider,
-        IEventBusSubscriptionsManager eventBusSubscriptionsManager,
+        IChirpEventBusSubscriptionsManager eventBusSubscriptionsManager,
         string topicOrQueueName,
         int retryMax = 5)
         : base(eventBusSubscriptionsManager, serviceProvider)

@@ -33,7 +33,7 @@ public class KafkaEventBus : EventBusBase
     public KafkaEventBus(
         IKafkaConnection kafkaConnection,
         IServiceProvider serviceProvider,
-        IEventBusSubscriptionsManager eventBusSubscriptionsManager,
+        IChirpEventBusSubscriptionsManager eventBusSubscriptionsManager,
         string topic,
         int retryMax = 5)
         : base(eventBusSubscriptionsManager, serviceProvider)

@@ -34,7 +34,7 @@ public class RedisEventBus : EventBusBase
     public RedisEventBus(
         IRedisConnection redisConnection,
         IServiceProvider serviceProvider,
-        IEventBusSubscriptionsManager eventBusSubscriptionsManager,
+        IChirpEventBusSubscriptionsManager eventBusSubscriptionsManager,
         string channelPrefix)
         : base(eventBusSubscriptionsManager, serviceProvider)
     {
