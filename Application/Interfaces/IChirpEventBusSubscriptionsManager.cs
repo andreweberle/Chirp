@@ -2,17 +2,17 @@
 
 namespace Chirp.Application.Interfaces;
 
-public interface IEventBusSubscriptionsManager
+public interface IChirpEventBusSubscriptionsManager
 {
     bool IsEmpty { get; }
     event EventHandler<string> OnEventRemoved;
 
     void AddSubscription<T, TH>()
         where T : IntegrationEvent
-        where TH : IIntegrationEventHandler<T>;
+        where TH : IChirpIntegrationEventHandler<T>;
 
     void RemoveSubscription<T, TH>()
-        where TH : IIntegrationEventHandler<T>
+        where TH : IChirpIntegrationEventHandler<T>
         where T : IntegrationEvent;
 
     bool HasSubscriptionsForEvent<T>() where T : IntegrationEvent;

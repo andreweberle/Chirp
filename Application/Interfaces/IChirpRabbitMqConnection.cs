@@ -2,7 +2,7 @@
 
 namespace Chirp.Application.Interfaces;
 
-public interface IRabbitMqConnection
+public interface IChirpRabbitMqConnection
 {
     public bool IsConnected { get; }
     public void TryConnect();

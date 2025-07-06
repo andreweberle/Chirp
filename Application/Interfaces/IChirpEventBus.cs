@@ -2,7 +2,7 @@
 
 namespace Chirp.Application.Interfaces;
 
-public interface IEventBus
+public interface IChirpEventBus
 {
     /// <summary>
     /// </summary>
@@ -15,5 +15,5 @@ public interface IEventBus
     /// <typeparam name="TH"></typeparam>
     public void Subscribe<T, TH>()
         where T : IntegrationEvent
-        where TH : IIntegrationEventHandler<T>;
+        where TH : IChirpIntegrationEventHandler<T>;
 }

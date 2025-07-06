@@ -2,11 +2,11 @@
 
 namespace Chirp.Application.Interfaces;
 
-public interface IIntegrationEventHandler
+public interface IIChirpIntegrationEventHandler
 {
 }
 
-public interface IIntegrationEventHandler<in TIntegrationEvent> : IIntegrationEventHandler
+public interface IChirpIntegrationEventHandler<in TIntegrationEvent> : IIChirpIntegrationEventHandler
     where TIntegrationEvent : IntegrationEvent
 {
     Task Handle(TIntegrationEvent @event);
