@@ -1,19 +1,20 @@
 ﻿using Chirp.Application.Interfaces;
+using Chirp.Domain.Common;
 using Chirp.Infrastructure.EventBus;
-using Chirp.Infrastructure.EventBus.RabbitMQ;
-using Chirp.Infrastructure.EventBus.Kafka;
-using Chirp.Infrastructure.EventBus.AzureServiceBus;
 using Chirp.Infrastructure.EventBus.AmazonSQS;
-using Chirp.Infrastructure.EventBus.Redis;
+using Chirp.Infrastructure.EventBus.AzureServiceBus;
 using Chirp.Infrastructure.EventBus.GooglePubSub;
+using Chirp.Infrastructure.EventBus.Kafka;
 using Chirp.Infrastructure.EventBus.NATS;
+using Chirp.Infrastructure.EventBus.RabbitMQ;
+using Chirp.Infrastructure.EventBus.Redis;
+using Microsoft.AspNetCore.Builder;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using RabbitMQ.Client;
 using System;
 using System.Linq;
-using Chirp.Domain.Common;
 using System.Reflection;
 
 namespace Chirp.Infrastructure;
@@ -21,39 +22,53 @@ namespace Chirp.Infrastructure;
 public static class DependencyInjection
 {
     /// <summary>
+    /// Configures the Chirp event bus for the application
+    /// </summary>
+    /// <param name="app">The application builder</param>
+    /// <returns>The application builder</returns>
+    public static IApplicationBuilder UseChirp(this IApplicationBuilder app)
+    {
+        // Get the event bus singleton from DI - this will trigger the initialization 
+        // that's already set up in AddChirp() through the factory method
+        IChirpEventBus eventBus = app.ApplicationServices.GetRequiredService<IChirpEventBus>();
+
+        // No need to re-subscribe handlers as that's already done in AddChirp
+        // when the singleton is created
+
+        return app;
+    }
+
+    /// <summary>
     /// Adds Chirp messaging services to the service collection with a fluent configuration API
     /// </summary>
     /// <param name="services">The service collection</param>
     /// <param name="configureOptions">Action to configure options</param>
     /// <param name="configuration">The configuration (required)</param>
     /// <returns>The service collection</returns>
-    public static IServiceCollection AddChirp(
+    private static IServiceCollection AddChirp(
         this IServiceCollection services,
         Action<ChirpOptions> configureOptions,
         IConfiguration configuration)
     {
-        if (configuration != null)
-        {
-            ChirpOptions options = new ChirpOptions();
-            configureOptions(options);
+        if (configuration == null) throw new ArgumentNullException(nameof(configuration));
+        ChirpOptions options = new();
+        configureOptions(options);
 
-            // Register consumers first so they're available when the event bus is created
-            RegisterConsumers(services, options);
+        // Register consumers first so they're available when the event bus is created
+        RegisterConsumers(services, options);
 
-            // Register event bus using options
-            services = AddEventBus(
-                services,
-                configuration,
-                options,
-                options.QueueName,
-                options.EventBusType,
-                options.RetryCount);
+        // Register event bus using options
+        services = AddEventBus(
+            services,
+            configuration,
+            options,
+            options.QueueName,
+            options.EventBusType,
+            options.RetryCount);
 
-            return services;
-        }
+        return services;
 
         // Create and configure options
-        throw new ArgumentNullException(nameof(configuration));
     }
 
     /// <summary>

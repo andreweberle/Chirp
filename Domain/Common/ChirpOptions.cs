@@ -1,6 +1,5 @@
 ﻿using Chirp.Infrastructure.EventBus;
-using System;
-using System.Collections.Generic;
+
 
 namespace Chirp.Domain.Common;
 
@@ -27,7 +26,7 @@ public class ChirpOptions
     /// <summary>
     /// Collection of registered event handler types
     /// </summary>
-    internal List<ConsumerRegistration> Consumers { get; } = new List<ConsumerRegistration>();
+    internal List<ConsumerRegistration> Consumers { get; } = [];
 
     /// <summary>
     /// Registers an integration event handler (consumer) to process events
@@ -45,15 +44,10 @@ public class ChirpOptions
 /// <summary>
 /// Represents a registered event handler/consumer
 /// </summary>
-internal class ConsumerRegistration
+internal class ConsumerRegistration(Type handlerType)
 {
-    public ConsumerRegistration(Type handlerType)
-    {
-        HandlerType = handlerType ?? throw new ArgumentNullException(nameof(handlerType));
-    }
-
     /// <summary>
     /// The event handler/consumer type
     /// </summary>
-    public Type HandlerType { get; }
+    public Type HandlerType { get; } = handlerType ?? throw new ArgumentNullException(nameof(handlerType));
 }
