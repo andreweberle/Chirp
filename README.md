@@ -31,9 +31,7 @@ Chirp is a flexible, provider-agnostic messaging library that simplifies publish
 
 ### Configuration
 
-Add the necessary configuration to your `appsettings.json`:
-```json
-{
+Add the necessary configuration to your `appsettings.json`:{
   "RMQ": {
     "Host": "localhost",
     "Port": 5672,
@@ -43,12 +41,8 @@ Add the necessary configuration to your `appsettings.json`:
     "ExchangeNameDLX": "chirp_dlx_exchange"
   }
 }
-```
-
 ### Setting Up Dependencies
-Register the required dependencies in your `Program.cs` or `Startup.cs`:using Chirp.Infrastructure;
-```csharp
-using Chirp.Infrastructure.EventBus;
+Register the required dependencies in your `Program.cs` or `Startup.cs`:using Chirp.Infrastructure.EventBus;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -63,14 +57,41 @@ services.AddChirp(options =>
     options.AddConsumer<OrderCreatedEventHandler>();
     options.AddConsumer<PaymentReceivedEventHandler>();
 });
-```
+### Using RabbitMqChirpOptions Directly
 
+You can also use the more specific `RabbitMqChirpOptions` class for more configuration options:
+using Chirp.Application.Common.EventBusOptions;
+
+// Add Chirp services with RabbitMQ-specific options
+services.AddChirp(options => 
+{
+    var rmqOptions = new RabbitMqChirpOptions
+    {
+        // Connection details (optional - if not specified, will use configuration)
+        Host = "my-rabbitmq-server",
+        Username = "my-username",
+        Password = "my-password",
+        
+        // RabbitMQ specific settings
+        QueueName = "my_service_queue",
+        RetryCount = 3,
+        ExchangeName = "my_custom_exchange",
+        DeadLetterExchangeName = "my_custom_dlx",
+        QueueDurable = true,
+        PersistentMessages = true,
+        
+        // Register event handlers
+        AddConsumer<OrderCreatedEventHandler>(),
+        AddConsumer<PaymentReceivedEventHandler>()
+    };
+    
+    return rmqOptions;
+}, configuration);
 ### Creating Events
 
-Create event classes that inherit from `IntegrationEvent`:
-```csharp
-using Chirp.Domain.Common;
-public record OrderCreatedEvent(int OrderId, string CustomerName, decimal Total) : IntegrationEvent;### Creating Event Handlers
+Create event classes that inherit from `IntegrationEvent`:using Chirp.Domain.Common;
+public record OrderCreatedEvent(int OrderId, string CustomerName, decimal Total) : IntegrationEvent;
+### Creating Event Handlers
 
 Create handlers that implement `IIntegrationEventHandler<T>`:using Chirp.Application.Interfaces;
 
@@ -83,11 +104,7 @@ public class OrderCreatedEventHandler : IIntegrationEventHandler<OrderCreatedEve
         await Task.CompletedTask;
     }
 }
-```
-
-### Publishing Events
-```csharp
-Inject `IEventBus` and publish events:public class OrderService
+### Publishing Eventspublic class OrderService
 {
     private readonly IEventBus _eventBus;
 
@@ -103,21 +120,15 @@ Inject `IEventBus` and publish events:public class OrderService
         _eventBus.Publish(orderCreatedEvent);
     }
 }
-```
-
 ## Advanced Usage
 
 ### Using the Event Bus Factory
-You can also use the `EventBusFactory` to create an instance of the event bus:
-```csharp
-IEventBus eventBus = EventBusFactory.Create(
+You can also use the `EventBusFactory` to create an instance of the event bus:IEventBus eventBus = EventBusFactory.Create(
     EventBusType.RabbitMQ,
     serviceProvider,
     configuration,
     "my_service_queue",
     retryCount: 5);
-```
-
 ### Working with Multiple Message Brokers
 
 Chirp is designed to support multiple message broker implementations. This can be useful in scenarios like:
@@ -130,9 +141,7 @@ Chirp is designed to support multiple message broker implementations. This can b
 Currently, the library has a fully implemented RabbitMQ provider, with other providers planned for future releases. 
 Once additional providers are implemented, you'll be able to use them by registering the appropriate connections and event buses.
 
-To manually register multiple event bus instances (once additional providers are implemented):
-```csharp
-// Register the default event bus (RabbitMQ)
+To manually register multiple event bus instances (once additional providers are implemented):// Register the default event bus (RabbitMQ)
 services.AddChirp(options =>
 {
     options.EventBusType = EventBusType.RabbitMQ;
@@ -159,9 +168,7 @@ services.AddSingleton<IEventBus>(serviceProvider =>
         "redis-channel"
     );
 });
-*/
-```
-#### Planned Features for Multi-Broker Support
+*/#### Planned Features for Multi-Broker Support
 
 - Message routing based on event type
 - Automatic failover between brokers

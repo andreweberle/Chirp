@@ -17,6 +17,30 @@ public class RabbitMqChirpOptions : ChirpOptions
     }
 
     /// <summary>
+    /// The RabbitMQ host to connect to
+    /// </summary>
+    /// <remarks>
+    /// When specified, this value overrides the "RMQ:Host" configuration setting
+    /// </remarks>
+    public string? Host { get; set; }
+
+    /// <summary>
+    /// The username for RabbitMQ authentication
+    /// </summary>
+    /// <remarks>
+    /// When specified, this value overrides the "RMQ:Username" configuration setting
+    /// </remarks>
+    public string? Username { get; set; }
+
+    /// <summary>
+    /// The password for RabbitMQ authentication
+    /// </summary>
+    /// <remarks>
+    /// When specified, this value overrides the "RMQ:Password" configuration setting
+    /// </remarks>
+    public string? Password { get; set; }
+
+    /// <summary>
     /// Exchange name for RabbitMQ messages
     /// </summary>
     public string ExchangeName { get; set; } = "chirp_event_bus";

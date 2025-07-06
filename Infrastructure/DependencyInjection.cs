@@ -130,7 +130,7 @@ public static class DependencyInjection
         switch (eventBusType)
         {
             case EventBusType.RabbitMQ:
-                services.AddRabbitMqConnection(configuration);
+                services.AddRabbitMqConnection(configuration, options as RabbitMqChirpOptions);
                 break;
 
             case EventBusType.Kafka:
@@ -205,16 +205,29 @@ public static class DependencyInjection
     /// <summary>
     /// Registers the RabbitMQ connection
     /// </summary>
+    /// <param name="services">The service collection</param>
+    /// <param name="configuration">The configuration</param>
+    /// <param name="options">Optional RabbitMQ options that may contain connection details</param>
     /// <exception cref="ArgumentNullException"></exception>
     private static IServiceCollection AddRabbitMqConnection(
         this IServiceCollection services,
-        IConfiguration configuration)
+        IConfiguration configuration,
+        RabbitMqChirpOptions? options = null)
     {
         services.AddSingleton<IChirpRabbitMqConnection>(sp =>
         {
-            string host = configuration["RMQ:Host"] ?? throw new ArgumentNullException("RMQ:Host configuration is missing");
-            string username = configuration["RMQ:Username"] ?? throw new ArgumentNullException("RMQ:Username configuration is missing");
-            string password = configuration["RMQ:Password"] ?? throw new ArgumentNullException("RMQ:Password configuration is missing");
+            // Use options values if provided, otherwise fall back to configuration
+            string host = options?.Host ?? 
+                configuration["RMQ:Host"] ?? 
+                throw new ArgumentNullException("RMQ:Host configuration is missing");
+                
+            string username = options?.Username ?? 
+                configuration["RMQ:Username"] ?? 
+                throw new ArgumentNullException("RMQ:Username configuration is missing");
+                
+            string password = options?.Password ?? 
+                configuration["RMQ:Password"] ?? 
+                throw new ArgumentNullException("RMQ:Password configuration is missing");
 
             IConnectionFactory connectionFactory = Domain.Common.ConnectionFactory.CreateConnectionFactory(host, username, password);
             return new ChirpRabbitMqConnection(connectionFactory);
