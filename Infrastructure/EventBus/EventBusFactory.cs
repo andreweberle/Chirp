@@ -1,3 +1,4 @@
+using Chirp.Application.Common.EventBusOptions;
 using Chirp.Application.Interfaces;
 using Chirp.Domain.Common;
 using Chirp.Infrastructure.EventBus.Common;
@@ -59,6 +60,84 @@ public enum EventBusType
 public static class EventBusFactory
 {
     /// <summary>
+    /// Creates an event bus implementation based on the specified options
+    /// </summary>
+    /// <param name="options">The chirp options</param>
+    /// <param name="serviceProvider">The service provider</param>
+    /// <param name="configuration">The configuration</param>
+    /// <returns>An event bus implementation</returns>
+    public static IChirpEventBus Create(
+        ChirpOptions options,
+        IServiceProvider serviceProvider,
+        IConfiguration configuration)
+    {
+        // Create a subscription manager to be used by the event bus
+        IChirpEventBusSubscriptionsManager subscriptionsManager = new InMemoryEventBusSubscriptionsManager();
+
+        // Handle different types of options
+        if (options is RabbitMqChirpOptions rabbitOptions)
+        {
+            return CreateRabbitMQEventBus(
+                serviceProvider,
+                subscriptionsManager,
+                rabbitOptions);
+        }
+        else if (options is KafkaChirpOptions kafkaOptions)
+        {
+            return CreateKafkaEventBus(
+                serviceProvider,
+                subscriptionsManager,
+                kafkaOptions);
+        }
+        else if (options is AzureServiceBusChirpOptions azureOptions)
+        {
+            return CreateAzureServiceBusEventBus(
+                serviceProvider,
+                subscriptionsManager,
+                azureOptions);
+        }
+        else if (options is AmazonSqsChirpOptions sqsOptions)
+        {
+            return CreateAmazonSQSEventBus(
+                serviceProvider,
+                subscriptionsManager,
+                configuration,
+                sqsOptions);
+        }
+        else if (options is RedisChirpOptions redisOptions)
+        {
+            return CreateRedisEventBus(
+                serviceProvider,
+                subscriptionsManager,
+                redisOptions);
+        }
+        else if (options is GooglePubSubChirpOptions googleOptions)
+        {
+            return CreateGooglePubSubEventBus(
+                serviceProvider,
+                subscriptionsManager,
+                googleOptions);
+        }
+        else if (options is NatsChirpOptions natsOptions)
+        {
+            return CreateNATSEventBus(
+                serviceProvider,
+                subscriptionsManager,
+                natsOptions);
+        }
+        else
+        {
+            // Fallback to using EventBusType for the base class
+            return Create(
+                options.EventBusType,
+                serviceProvider,
+                configuration,
+                options.QueueName,
+                options.RetryCount);
+        }
+    }
+
+    /// <summary>
     /// Creates an event bus implementation based on the specified type
     /// </summary>
     /// <param name="eventBusType">The type of event bus to create</param>
@@ -111,6 +190,27 @@ public static class EventBusFactory
     private static ChirpRabbitMqEventBus CreateRabbitMQEventBus(
         IServiceProvider serviceProvider,
         IChirpEventBusSubscriptionsManager subscriptionsManager,
+        RabbitMqChirpOptions options)
+    {
+        // Get the RabbitMQ connection
+        IChirpRabbitMqConnection connection = serviceProvider.GetService(typeof(IChirpRabbitMqConnection)) as IChirpRabbitMqConnection
+                                         ?? throw new InvalidOperationException(
+                                             "RabbitMQ connection not registered in service provider");
+
+        // Create the RabbitMQ event bus using options properties
+        return new ChirpRabbitMqEventBus(
+            connection,
+            serviceProvider,
+            subscriptionsManager,
+            options.QueueName,
+            options.RetryCount,
+            options.ExchangeName,
+            options.DeadLetterExchangeName);
+    }
+
+    private static ChirpRabbitMqEventBus CreateRabbitMQEventBus(
+        IServiceProvider serviceProvider,
+        IChirpEventBusSubscriptionsManager subscriptionsManager,
         IConfiguration configuration,
         string queueName,
         int retryCount)
@@ -135,6 +235,24 @@ public static class EventBusFactory
             dlxExchangeName);
     }
 
+    private static KafkaEventBus CreateKafkaEventBus(
+        IServiceProvider serviceProvider,
+        IChirpEventBusSubscriptionsManager subscriptionsManager,
+        KafkaChirpOptions options)
+    {
+        // Get the Kafka connection
+        IKafkaConnection connection = serviceProvider.GetService(typeof(IKafkaConnection)) as IKafkaConnection
+                                      ?? throw new InvalidOperationException(
+                                          "Kafka connection not registered in service provider");
+
+        // Create the Kafka event bus
+        return new KafkaEventBus(
+            connection,
+            serviceProvider,
+            subscriptionsManager,
+            options.TopicName,
+            options.RetryCount);
+    }
 
     // Example implementation for when Kafka is ready
     private static KafkaEventBus CreateKafkaEventBus(
@@ -158,6 +276,25 @@ public static class EventBusFactory
             retryCount);
     }
 
+    private static AzureServiceBusEventBus CreateAzureServiceBusEventBus(
+        IServiceProvider serviceProvider,
+        IChirpEventBusSubscriptionsManager subscriptionsManager,
+        AzureServiceBusChirpOptions options)
+    {
+        // Get the Azure Service Bus connection
+        IAzureServiceBusConnection connection =
+            serviceProvider.GetService(typeof(IAzureServiceBusConnection)) as IAzureServiceBusConnection
+            ?? throw new InvalidOperationException("Azure Service Bus connection not registered in service provider");
+
+        // Create the Azure Service Bus event bus
+        return new AzureServiceBusEventBus(
+            connection,
+            serviceProvider,
+            subscriptionsManager,
+            options.UseTopics ? options.TopicName : options.QueueName,
+            options.RetryCount);
+    }
+
     // Example implementation for Azure Service Bus
     private static AzureServiceBusEventBus CreateAzureServiceBusEventBus(
         IServiceProvider serviceProvider,
@@ -178,6 +315,37 @@ public static class EventBusFactory
             subscriptionsManager,
             queueName,
             retryCount);
+    }
+
+    private static AmazonSqsEventBus CreateAmazonSQSEventBus(
+        IServiceProvider serviceProvider,
+        IChirpEventBusSubscriptionsManager subscriptionsManager,
+        IConfiguration configuration,
+        AmazonSqsChirpOptions options)
+    {
+        // Get the Amazon SQS connection
+        IAmazonSQSConnection connection =
+            serviceProvider.GetService(typeof(IAmazonSQSConnection)) as IAmazonSQSConnection
+            ?? throw new InvalidOperationException("Amazon SQS connection not registered in service provider");
+
+        // Use options for queue URL and dead letter queue URL
+        string queueUrl = !string.IsNullOrEmpty(options.QueueUrl) ? options.QueueUrl : options.QueueName;
+        string deadLetterQueueUrl = options.DeadLetterQueueUrl;
+
+        if (string.IsNullOrEmpty(deadLetterQueueUrl))
+        {
+            deadLetterQueueUrl = configuration["AWS:DeadLetterQueueUrl"] 
+                ?? throw new ArgumentNullException("DeadLetterQueueUrl is missing from options and AWS:DeadLetterQueueUrl is missing from configuration");
+        }
+
+        // Create the Amazon SQS event bus
+        return new AmazonSqsEventBus(
+            connection,
+            serviceProvider,
+            subscriptionsManager,
+            queueUrl,
+            deadLetterQueueUrl,
+            options.RetryCount);
     }
 
     // Example implementation for Amazon SQS
@@ -207,6 +375,24 @@ public static class EventBusFactory
             retryCount);
     }
 
+    private static RedisEventBus CreateRedisEventBus(
+        IServiceProvider serviceProvider,
+        IChirpEventBusSubscriptionsManager subscriptionsManager,
+        RedisChirpOptions options)
+    {
+        // Get the Redis connection
+        IRedisConnection connection = serviceProvider.GetService(typeof(IRedisConnection)) as IRedisConnection
+                                      ?? throw new InvalidOperationException(
+                                          "Redis connection not registered in service provider");
+
+        // Create the Redis event bus
+        return new RedisEventBus(
+            connection,
+            serviceProvider,
+            subscriptionsManager,
+            options.ChannelPrefix);
+    }
+
     // Example implementation for Redis
     private static RedisEventBus CreateRedisEventBus(
         IServiceProvider serviceProvider,
@@ -226,6 +412,25 @@ public static class EventBusFactory
             serviceProvider,
             subscriptionsManager,
             channelPrefix);
+    }
+
+    private static GooglePubSubEventBus CreateGooglePubSubEventBus(
+        IServiceProvider serviceProvider,
+        IChirpEventBusSubscriptionsManager subscriptionsManager,
+        GooglePubSubChirpOptions options)
+    {
+        // Get the Google Pub/Sub connection
+        IGooglePubSubConnection connection =
+            serviceProvider.GetService(typeof(IGooglePubSubConnection)) as IGooglePubSubConnection
+            ?? throw new InvalidOperationException("Google Pub/Sub connection not registered in service provider");
+
+        // Create the Google Pub/Sub event bus
+        return new GooglePubSubEventBus(
+            connection,
+            serviceProvider,
+            subscriptionsManager,
+            options.TopicPrefix,
+            options.SubscriptionIdPrefix);
     }
 
     // Example implementation for Google Cloud Pub/Sub
@@ -253,6 +458,25 @@ public static class EventBusFactory
             subscriptionsManager,
             topicPrefix,
             subscriptionIdPrefix);
+    }
+
+    private static NATSEventBus CreateNATSEventBus(
+        IServiceProvider serviceProvider,
+        IChirpEventBusSubscriptionsManager subscriptionsManager,
+        NatsChirpOptions options)
+    {
+        // Get the NATS connection
+        INATSConnection connection = serviceProvider.GetService(typeof(INATSConnection)) as INATSConnection
+                                     ?? throw new InvalidOperationException(
+                                         "NATS connection not registered in service provider");
+
+        // Create the NATS event bus
+        return new NATSEventBus(
+            connection,
+            serviceProvider,
+            subscriptionsManager,
+            options.SubjectPrefix,
+            options.QueueGroup);
     }
 
     // Example implementation for NATS

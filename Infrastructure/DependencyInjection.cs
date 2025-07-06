@@ -1,4 +1,5 @@
-﻿using Chirp.Application.Interfaces;
+﻿using Chirp.Application.Common.EventBusOptions;
+using Chirp.Application.Interfaces;
 using Chirp.Domain.Common;
 using Chirp.Infrastructure.EventBus;
 using Chirp.Infrastructure.EventBus.AmazonSQS;
@@ -61,14 +62,9 @@ public static class DependencyInjection
         services = AddEventBus(
             services,
             configuration,
-            options,
-            options.QueueName,
-            options.EventBusType,
-            options.RetryCount);
+            options);
 
         return services;
-
-        // Create and configure options
     }
 
     /// <summary>
@@ -96,23 +92,40 @@ public static class DependencyInjection
     }
 
     /// <summary>
+    /// Determines the event bus type from the options object
+    /// </summary>
+    /// <param name="options">The chirp options</param>
+    /// <returns>The event bus type</returns>
+    private static EventBusType DetermineEventBusType(ChirpOptions options)
+    {
+        return options switch
+        {
+            RabbitMqChirpOptions => EventBusType.RabbitMQ,
+            KafkaChirpOptions => EventBusType.Kafka,
+            AzureServiceBusChirpOptions => EventBusType.AzureServiceBus,
+            AmazonSqsChirpOptions => EventBusType.AmazonSqs,
+            RedisChirpOptions => EventBusType.Redis,
+            GooglePubSubChirpOptions => EventBusType.GooglePubSub,
+            NatsChirpOptions => EventBusType.NATS,
+            _ => options.EventBusType
+        };
+    }
+
+    /// <summary>
     /// Adds event bus services to the service collection
     /// </summary>
     /// <param name="services">The service collection</param>
     /// <param name="configuration">The configuration</param>
     /// <param name="options">The chirp options</param>
-    /// <param name="queueOrTopicName">The queue, topic, or channel name for the messaging service</param>
-    /// <param name="eventBusType">The event bus type to use</param>
-    /// <param name="retryCount">Number of retries for processing events</param>
     /// <returns>The service collection</returns>
     private static IServiceCollection AddEventBus(
         this IServiceCollection services,
         IConfiguration configuration,
-        ChirpOptions options,
-        string queueOrTopicName,
-        EventBusType eventBusType = EventBusType.RabbitMQ,
-        int retryCount = 5)
+        ChirpOptions options)
     {
+        // Determine the event bus type from options
+        EventBusType eventBusType = DetermineEventBusType(options);
+
         // Register necessary connections based on event bus type
         switch (eventBusType)
         {
@@ -157,12 +170,11 @@ public static class DependencyInjection
         // Register the event bus using the factory
         services.AddSingleton<IChirpEventBus>(sp =>
         {
+            // Create event bus based on options type, using the new overload
             IChirpEventBus eventBus = EventBusFactory.Create(
-                eventBusType,
+                options,
                 sp,
-                configuration,
-                queueOrTopicName,
-                retryCount);
+                configuration);
             
             // Auto-subscribe all registered handlers
             AutoSubscribeEventHandlers(eventBus, options, sp);
@@ -170,6 +182,24 @@ public static class DependencyInjection
         });
 
         return services;
+    }
+
+    /// <summary>
+    /// Creates an appropriate event bus instance based on the options type
+    /// </summary>
+    private static IChirpEventBus CreateEventBus(
+        ChirpOptions options,
+        IServiceProvider serviceProvider,
+        IConfiguration configuration)
+    {
+        // For base ChirpOptions, use the EventBusType property and the EventBusFactory
+        EventBusType eventBusType = DetermineEventBusType(options);
+
+        // Attempt to create a specific event bus type based on options
+        return EventBusFactory.Create(
+            options,
+            serviceProvider,
+            configuration);
     }
 
     /// <summary>
