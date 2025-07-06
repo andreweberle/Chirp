@@ -26,12 +26,13 @@ Chirp is a flexible, provider-agnostic messaging library that simplifies publish
 - **Clean subscription management** with in-memory event tracking
 
 ## Installation
-`dotnet add package Chirp`
+dotnet add package Chirp
 ## Getting Started
 
 ### Configuration
 
-Add the necessary configuration to your `appsettings.json`:{
+Add the necessary configuration to your `appsettings.json`:
+{
   "RMQ": {
     "Host": "localhost",
     "Port": 5672,
@@ -42,11 +43,14 @@ Add the necessary configuration to your `appsettings.json`:{
   }
 }
 ### Setting Up Dependencies
-Register the required dependencies in your `Program.cs` or `Startup.cs`:using Chirp.Infrastructure.EventBus;
+
+Register the required dependencies in your `Program.cs` or `Startup.cs`:
+using Chirp.Infrastructure;
+using Chirp.Infrastructure.EventBus;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 
-// Add Chirp services with RabbitMQ implementation
+// Add Chirp services with generic options
 services.AddChirp(options =>
 {
     options.EventBusType = EventBusType.RabbitMQ;
@@ -57,58 +61,88 @@ services.AddChirp(options =>
     options.AddConsumer<OrderCreatedEventHandler>();
     options.AddConsumer<PaymentReceivedEventHandler>();
 });
-### Using RabbitMqChirpOptions Directly
+### Using Strongly Typed Options
 
-You can also use the more specific `RabbitMqChirpOptions` class for more configuration options:
+Chirp supports strongly typed configuration options for each message broker implementation. This provides better IntelliSense and type safety:
+
+#### RabbitMQ Configuration
 using Chirp.Application.Common.EventBusOptions;
+using Chirp.Infrastructure;
 
 // Add Chirp services with RabbitMQ-specific options
 services.AddChirp(options => 
 {
-    var rmqOptions = new RabbitMqChirpOptions
-    {
-        // Connection details (optional - if not specified, will use configuration)
-        Host = "my-rabbitmq-server",
-        Username = "my-username",
-        Password = "my-password",
-        
-        // RabbitMQ specific settings
-        QueueName = "my_service_queue",
-        RetryCount = 3,
-        ExchangeName = "my_custom_exchange",
-        DeadLetterExchangeName = "my_custom_dlx",
-        QueueDurable = true,
-        PersistentMessages = true,
-        
-        // Register event handlers
-        AddConsumer<OrderCreatedEventHandler>(),
-        AddConsumer<PaymentReceivedEventHandler>()
-    };
+    options.Host = "my-rabbitmq-server";
+    options.Username = "my-username";
+    options.Password = "my-password";
+    options.QueueName = "my_service_queue";
+    options.RetryCount = 3;
+    options.ExchangeName = "my_custom_exchange";
+    options.DeadLetterExchangeName = "my_custom_dlx";
+    options.QueueDurable = true;
+    options.PersistentMessages = true;
     
-    return rmqOptions;
-}, configuration);
+    // Register event handlers
+    options.AddConsumer<OrderCreatedEventHandler>();
+    options.AddConsumer<PaymentReceivedEventHandler>();
+});
+#### Kafka Configuration (When Implemented)
+using Chirp.Application.Common.EventBusOptions;
+using Chirp.Infrastructure;
+
+// Add Chirp services with Kafka-specific options
+services.AddChirp(options => 
+{
+    options.TopicName = "my-topic";
+    options.ConsumerGroupId = "my-service-group";
+    options.AutoCreateTopics = true;
+    options.NumPartitions = 3;
+    options.ReplicationFactor = 2;
+    
+    // Register event handlers
+    options.AddConsumer<OrderCreatedEventHandler>();
+});
+#### Azure Service Bus Configuration (When Implemented)
+using Chirp.Application.Common.EventBusOptions;
+using Chirp.Infrastructure;
+
+// Add Chirp services with Azure Service Bus-specific options
+services.AddChirp(options => 
+{
+    options.UseTopics = true;
+    options.TopicName = "my-topic";
+    options.SubscriptionName = "my-subscription";
+    options.AutoCreateResources = true;
+    
+    // Register event handlers
+    options.AddConsumer<OrderCreatedEventHandler>();
+});
 ### Creating Events
 
-Create event classes that inherit from `IntegrationEvent`:using Chirp.Domain.Common;
+Create event classes that inherit from `IntegrationEvent`:
+using Chirp.Domain.Common;
+
 public record OrderCreatedEvent(int OrderId, string CustomerName, decimal Total) : IntegrationEvent;
 ### Creating Event Handlers
 
-Create handlers that implement `IIntegrationEventHandler<T>`:using Chirp.Application.Interfaces;
+Create handlers that implement `IIntegrationEventHandler<T>`:
+using Chirp.Application.Interfaces;
 
-public class OrderCreatedEventHandler : IIntegrationEventHandler<OrderCreatedEvent>
+public class OrderCreatedEventHandler : IChirpIntegrationEventHandler<OrderCreatedEvent>
 {
     public async Task Handle(OrderCreatedEvent @event)
     {
         // Process the event
-        Console.WriteLine($"Order {event.OrderId} created for {event.CustomerName} with total {event.Total}");
+        Console.WriteLine($"Order {@event.OrderId} created for {@event.CustomerName} with total {@event.Total}");
         await Task.CompletedTask;
     }
 }
-### Publishing Eventspublic class OrderService
+### Publishing Events
+public class OrderService
 {
-    private readonly IEventBus _eventBus;
+    private readonly IChirpEventBus _eventBus;
 
-    public OrderService(IEventBus eventBus)
+    public OrderService(IChirpEventBus eventBus)
     {
         _eventBus = eventBus;
     }
@@ -123,7 +157,9 @@ public class OrderCreatedEventHandler : IIntegrationEventHandler<OrderCreatedEve
 ## Advanced Usage
 
 ### Using the Event Bus Factory
-You can also use the `EventBusFactory` to create an instance of the event bus:IEventBus eventBus = EventBusFactory.Create(
+
+You can also use the `EventBusFactory` to create an instance of the event bus:
+IChirpEventBus eventBus = EventBusFactory.Create(
     EventBusType.RabbitMQ,
     serviceProvider,
     configuration,
@@ -141,7 +177,8 @@ Chirp is designed to support multiple message broker implementations. This can b
 Currently, the library has a fully implemented RabbitMQ provider, with other providers planned for future releases. 
 Once additional providers are implemented, you'll be able to use them by registering the appropriate connections and event buses.
 
-To manually register multiple event bus instances (once additional providers are implemented):// Register the default event bus (RabbitMQ)
+To manually register multiple event bus instances (once additional providers are implemented):
+// Register the default event bus (RabbitMQ)
 services.AddChirp(options =>
 {
     options.EventBusType = EventBusType.RabbitMQ;
@@ -159,7 +196,7 @@ services.AddSingleton<IRedisConnection>(sp =>
 });
 
 // Register another event bus
-services.AddSingleton<IEventBus>(serviceProvider => 
+services.AddSingleton<IChirpEventBus>(serviceProvider => 
 {
     return EventBusFactory.Create(
         EventBusType.Redis, 
@@ -168,7 +205,8 @@ services.AddSingleton<IEventBus>(serviceProvider =>
         "redis-channel"
     );
 });
-*/#### Planned Features for Multi-Broker Support
+*/
+#### Planned Features for Multi-Broker Support
 
 - Message routing based on event type
 - Automatic failover between brokers
@@ -179,13 +217,13 @@ services.AddSingleton<IEventBus>(serviceProvider =>
 
 | Provider                 | Status          | Configuration Section    |
 | :----------------------- | :-------------: | :----------------------- |
-|  **RabbitMQ**            | ✅ Implemented | ``RMQ``                  |
-| **Kafka**                |  Planned        | ``Kafka``                |
-| **Redis**                |  Planned        | ``Redis``                |
-| **Azure Service Bus**    | Planned         | ``AzureServiceBus``      |
-| **Amazon SQS**           | Planned         | ``AWS:SQS``              |
-| **NATS**                 | Planned         | ``NATS``                 |
-| **Google Pub/Sub**       | Planned         | ``GooglePubSub``         |
+| **RabbitMQ**             | ✅ Implemented  | `RMQ`                    |
+| **Kafka**                | Planned         | `Kafka`                  |
+| **Redis**                | Planned         | `Redis`                  |
+| **Azure Service Bus**    | Planned         | `AzureServiceBus`        |
+| **Amazon SQS**           | Planned         | `AWS:SQS`                |
+| **NATS**                 | Planned         | `NATS`                   |
+| **Google Pub/Sub**       | Planned         | `GooglePubSub`           |
 
 
 ## Contributing
