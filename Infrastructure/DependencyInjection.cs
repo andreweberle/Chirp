@@ -13,6 +13,7 @@ using Microsoft.AspNetCore.Builder;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.Hosting;
 using RabbitMQ.Client;
 using System;
 using System.Linq;
@@ -37,6 +38,23 @@ public static class DependencyInjection
         // when the singleton is created
 
         return app;
+    }
+
+    /// <summary>
+    /// Configures the Chirp event bus for the host
+    /// </summary>
+    /// <param name="host">The host</param>
+    /// <returns>The host</returns>
+    public static IHost UseChirp(this IHost host)
+    {
+        // Get the event bus singleton from DI - this will trigger the initialization 
+        // that's already set up in AddChirp() through the factory method
+        IChirpEventBus eventBus = host.Services.GetRequiredService<IChirpEventBus>();
+
+        // No need to re-subscribe handlers as that's already done in AddChirp
+        // when the singleton is created
+
+        return host;
     }
 
     /// <summary>
