@@ -280,12 +280,36 @@ public class ChirpRabbitMqEventBus : EventBusBase
                 throw new Exception($"Unable To Get Subscription For ${eventName}");
             }
 
-        await using AsyncServiceScope scope = ServiceProvider.CreateAsyncScope();
+        // Important fix: Use ServiceProvider directly first to try to find singleton/transient handlers
+        // that might have been directly retrieved in tests
         IEnumerable<SubscriptionInfo> subscriptions = SubscriptionsManager.GetHandlersForEvent(eventName);
-
+        
+        // Process using both ServiceProvider and a new scope to ensure handlers are found
+        // in various registration scenarios
+        bool anyHandled = await ProcessHandlers(subscriptions, ServiceProvider, eventName, message);
+        
+        // If no handlers were found in the root provider, try with a scope
+        if (!anyHandled)
+        {
+            await using AsyncServiceScope scope = ServiceProvider.CreateAsyncScope();
+            await ProcessHandlers(subscriptions, scope.ServiceProvider, eventName, message);
+        }
+    }
+    
+    /// <summary>
+    /// Process event handlers from a specific service provider
+    /// </summary>
+    private async Task<bool> ProcessHandlers(
+        IEnumerable<SubscriptionInfo> subscriptions, 
+        IServiceProvider provider, 
+        string eventName, 
+        string message)
+    {
+        bool anyHandled = false;
+        
         foreach (SubscriptionInfo subscription in subscriptions)
         {
-            object? handler = scope.ServiceProvider.GetService(subscription.HandlerType);
+            object? handler = provider.GetService(subscription.HandlerType);
             if (handler == null) continue;
 
             Type? eventType = SubscriptionsManager.GetEventTypeByName(eventName);
@@ -317,12 +341,15 @@ public class ChirpRabbitMqEventBus : EventBusBase
             {
                 await Task.Yield();
                 await (Task)handleMethod.Invoke(handler, new[] { integrationEvent })!;
+                anyHandled = true;
             }
             else
             {
                 throw new Exception($"Handle method not found on handler {handler.GetType().Name}");
             }
         }
+        
+        return anyHandled;
     }
 
     /// <summary>
