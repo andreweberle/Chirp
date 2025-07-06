@@ -1,7 +1,5 @@
 using Chirp.Application.Interfaces;
-using Chirp.Domain.Common;
 using Chirp.Infrastructure.EventBus;
-using Chirp.Infrastructure.EventBus.Common;
 using Chirp.Infrastructure.EventBus.RabbitMQ;
 using Microsoft.Extensions.Configuration;
 
@@ -11,11 +9,11 @@ namespace Chirp.Infrastructure.Tests.Common;
 public class EventBusFactoryTests
 {
     [TestMethod]
-    public void Create_RabbitMQEventBusType_ReturnsRabbitMQEventBus()
+    public void CreateRabbitMQEventBusTypeReturnsRabbitMQEventBus()
     {
         // Arrange
         Mock<IServiceProvider> mockServiceProvider = new();
-        Mock<IRabbitMqConnection> mockConnection = new();
+        Mock<IChirpRabbitMqConnection> mockConnection = new();
         Mock<IConfiguration> mockConfiguration = new();
 
         // Set up configuration values
@@ -24,11 +22,11 @@ public class EventBusFactoryTests
 
         // Set up service provider to return mock connection
         mockServiceProvider
-            .Setup(sp => sp.GetService(typeof(IRabbitMqConnection)))
+            .Setup(sp => sp.GetService(typeof(IChirpRabbitMqConnection)))
             .Returns(mockConnection.Object);
 
         // Act
-        IEventBus result = EventBusFactory.Create(
+        IChirpEventBus result = EventBusFactory.Create(
             EventBusType.RabbitMQ,
             mockServiceProvider.Object,
             mockConfiguration.Object,
@@ -36,7 +34,7 @@ public class EventBusFactoryTests
             5);
 
         // Assert
-        Assert.IsInstanceOfType<RabbitMqEventBus>(result);
+        Assert.IsInstanceOfType<ChirpRabbitMqEventBus>(result);
     }
 
     [TestMethod]
@@ -44,7 +42,7 @@ public class EventBusFactoryTests
     {
         // Arrange
         Mock<IServiceProvider> mockServiceProvider = new Mock<IServiceProvider>();
-        Mock<IRabbitMqConnection> mockConnection = new Mock<IRabbitMqConnection>();
+        Mock<IChirpRabbitMqConnection> mockConnection = new Mock<IChirpRabbitMqConnection>();
         Mock<IConfiguration> mockConfiguration = new Mock<IConfiguration>();
 
         // Set up configuration to return null for exchange names (use defaults)
@@ -53,11 +51,11 @@ public class EventBusFactoryTests
 
         // Set up service provider to return mock connection
         mockServiceProvider
-            .Setup(sp => sp.GetService(typeof(IRabbitMqConnection)))
+            .Setup(sp => sp.GetService(typeof(IChirpRabbitMqConnection)))
             .Returns(mockConnection.Object);
 
         // Act
-        IEventBus result = EventBusFactory.Create(
+        IChirpEventBus result = EventBusFactory.Create(
             EventBusType.RabbitMQ,
             mockServiceProvider.Object,
             mockConfiguration.Object,
@@ -65,7 +63,7 @@ public class EventBusFactoryTests
             5);
 
         // Assert
-        Assert.IsInstanceOfType<RabbitMqEventBus>(result);
+        Assert.IsInstanceOfType<ChirpRabbitMqEventBus>(result);
     }
 
     [TestMethod]
@@ -78,7 +76,7 @@ public class EventBusFactoryTests
 
         // Set up service provider to return null for connection (not registered)
         mockServiceProvider
-            .Setup(sp => sp.GetService(typeof(IRabbitMqConnection)))
+            .Setup(sp => sp.GetService(typeof(IChirpRabbitMqConnection)))
             .Returns(null);
 
         // Act - should throw InvalidOperationException
@@ -91,7 +89,7 @@ public class EventBusFactoryTests
 
     [TestMethod]
     [ExpectedException(typeof(NotImplementedException))]
-    public void Create_KafkaEventBusType_ThrowsNotImplementedException()
+    public void CreateKafkaEventBusTypeThrowsNotImplementedException()
     {
         // Arrange
         Mock<IServiceProvider> mockServiceProvider = new Mock<IServiceProvider>();
@@ -107,7 +105,7 @@ public class EventBusFactoryTests
 
     [TestMethod]
     [ExpectedException(typeof(NotImplementedException))]
-    public void Create_AzureServiceBusEventBusType_ThrowsNotImplementedException()
+    public void CreateAzureServiceBusEventBusTypeThrowsNotImplementedException()
     {
         // Arrange
         Mock<IServiceProvider> mockServiceProvider = new Mock<IServiceProvider>();
@@ -123,7 +121,7 @@ public class EventBusFactoryTests
 
     [TestMethod]
     [ExpectedException(typeof(NotImplementedException))]
-    public void Create_AmazonSqsEventBusType_ThrowsNotImplementedException()
+    public void CreateAmazonSqsEventBusTypeThrowsNotImplementedException()
     {
         // Arrange
         Mock<IServiceProvider> mockServiceProvider = new Mock<IServiceProvider>();
@@ -139,7 +137,7 @@ public class EventBusFactoryTests
 
     [TestMethod]
     [ExpectedException(typeof(NotImplementedException))]
-    public void Create_RedisEventBusType_ThrowsNotImplementedException()
+    public void CreateRedisEventBusTypeThrowsNotImplementedException()
     {
         // Arrange
         Mock<IServiceProvider> mockServiceProvider = new Mock<IServiceProvider>();
@@ -155,7 +153,7 @@ public class EventBusFactoryTests
 
     [TestMethod]
     [ExpectedException(typeof(NotImplementedException))]
-    public void Create_GooglePubSubEventBusType_ThrowsNotImplementedException()
+    public void CreateGooglePubSubEventBusTypeThrowsNotImplementedException()
     {
         // Arrange
         Mock<IServiceProvider> mockServiceProvider = new Mock<IServiceProvider>();
@@ -171,7 +169,7 @@ public class EventBusFactoryTests
 
     [TestMethod]
     [ExpectedException(typeof(NotImplementedException))]
-    public void Create_NATSEventBusType_ThrowsNotImplementedException()
+    public void CreateNATSEventBusTypeThrowsNotImplementedException()
     {
         // Arrange
         Mock<IServiceProvider> mockServiceProvider = new Mock<IServiceProvider>();
@@ -187,7 +185,7 @@ public class EventBusFactoryTests
 
     [TestMethod]
     [ExpectedException(typeof(ArgumentException))]
-    public void Create_InvalidEventBusType_ThrowsArgumentException()
+    public void CreateInvalidEventBusTypeThrowsArgumentException()
     {
         // Arrange
         Mock<IServiceProvider> mockServiceProvider = new Mock<IServiceProvider>();
@@ -202,20 +200,20 @@ public class EventBusFactoryTests
     }
 
     [TestMethod]
-    public void Create_VerifyInMemoryEventBusSubscriptionsManager()
+    public void CreateVerifyInMemoryEventBusSubscriptionsManager()
     {
         // Arrange
         Mock<IServiceProvider> mockServiceProvider = new Mock<IServiceProvider>();
-        Mock<IRabbitMqConnection> mockConnection = new Mock<IRabbitMqConnection>();
+        Mock<IChirpRabbitMqConnection> mockConnection = new Mock<IChirpRabbitMqConnection>();
         Mock<IConfiguration> mockConfiguration = new Mock<IConfiguration>();
 
         // Set up service provider to return mock connection
         mockServiceProvider
-            .Setup(sp => sp.GetService(typeof(IRabbitMqConnection)))
+            .Setup(sp => sp.GetService(typeof(IChirpRabbitMqConnection)))
             .Returns(mockConnection.Object);
 
         // Act
-        IEventBus result = EventBusFactory.Create(
+        IChirpEventBus result = EventBusFactory.Create(
             EventBusType.RabbitMQ,
             mockServiceProvider.Object,
             mockConfiguration.Object,
@@ -223,6 +221,6 @@ public class EventBusFactoryTests
 
         // Assert - we can't directly verify the subscription manager as it's private
         // but we can verify the result is created and the mock was called
-        mockServiceProvider.Verify(sp => sp.GetService(typeof(IRabbitMqConnection)), Times.Once);
+        mockServiceProvider.Verify(sp => sp.GetService(typeof(IChirpRabbitMqConnection)), Times.Once);
     }
 }

@@ -8,7 +8,7 @@ namespace Chirp.Infrastructure.Tests.Common;
 public class InMemoryEventBusSubscriptionsManagerTests
 {
     [TestMethod]
-    public void IsEmpty_InitialState_ReturnsTrue()
+    public void IsEmptyInitialStateReturnsTrue()
     {
         // Arrange
         InMemoryEventBusSubscriptionsManager manager = new InMemoryEventBusSubscriptionsManager();
@@ -18,7 +18,7 @@ public class InMemoryEventBusSubscriptionsManagerTests
     }
 
     [TestMethod]
-    public void AddSubscription_AddsHandlerForEvent()
+    public void AddSubscriptionAddsHandlerForEvent()
     {
         // Arrange
         InMemoryEventBusSubscriptionsManager manager = new InMemoryEventBusSubscriptionsManager();
@@ -33,7 +33,7 @@ public class InMemoryEventBusSubscriptionsManagerTests
     }
 
     [TestMethod]
-    public void GetHandlersForEvent_ReturnsCorrectHandler()
+    public void GetHandlersForEventReturnsCorrectHandler()
     {
         // Arrange
         InMemoryEventBusSubscriptionsManager manager = new InMemoryEventBusSubscriptionsManager();
@@ -49,7 +49,7 @@ public class InMemoryEventBusSubscriptionsManagerTests
     }
 
     [TestMethod]
-    public void RemoveSubscription_RemovesHandlerForEvent()
+    public void RemoveSubscriptionRemovesHandlerForEvent()
     {
         // Arrange
         InMemoryEventBusSubscriptionsManager manager = new InMemoryEventBusSubscriptionsManager();
@@ -64,7 +64,7 @@ public class InMemoryEventBusSubscriptionsManagerTests
     }
 
     [TestMethod]
-    public void GetEventTypeByName_ReturnsCorrectType()
+    public void GetEventTypeByNameReturnsCorrectType()
     {
         // Arrange
         InMemoryEventBusSubscriptionsManager manager = new InMemoryEventBusSubscriptionsManager();
@@ -80,7 +80,7 @@ public class InMemoryEventBusSubscriptionsManagerTests
     }
 
     [TestMethod]
-    public void GetEventTypeByName_NonExistentEventName_ReturnsNull()
+    public void GetEventTypeByNameNonExistentEventNameReturnsNull()
     {
         // Arrange
         InMemoryEventBusSubscriptionsManager manager = new InMemoryEventBusSubscriptionsManager();
@@ -93,7 +93,7 @@ public class InMemoryEventBusSubscriptionsManagerTests
     }
 
     [TestMethod]
-    public void Clear_RemovesAllSubscriptions()
+    public void ClearRemovesAllSubscriptions()
     {
         // Arrange
         InMemoryEventBusSubscriptionsManager manager = new InMemoryEventBusSubscriptionsManager();
@@ -108,7 +108,7 @@ public class InMemoryEventBusSubscriptionsManagerTests
     }
 
     [TestMethod]
-    public void AddMultipleSubscriptions_ForSameEvent_RegistersBoth()
+    public void AddMultipleSubscriptionsForSameEventRegistersBoth()
     {
         // Arrange
         InMemoryEventBusSubscriptionsManager manager = new InMemoryEventBusSubscriptionsManager();
@@ -123,7 +123,7 @@ public class InMemoryEventBusSubscriptionsManagerTests
     }
 
     [TestMethod]
-    public void RemoveOne_OfMultipleSubscriptions_LeavesOthers()
+    public void RemoveOneOfMultipleSubscriptionsLeavesOthers()
     {
         // Arrange
         InMemoryEventBusSubscriptionsManager manager = new InMemoryEventBusSubscriptionsManager();
@@ -145,7 +145,7 @@ public class InMemoryEventBusSubscriptionsManagerTests
     private record AnotherTestIntegrationEvent : IntegrationEvent;
 
     // Test event handlers for testing
-    private class TestIntegrationEventHandler : IIntegrationEventHandler<TestIntegrationEvent>
+    private class TestIntegrationEventHandler : IChirpIntegrationEventHandler<TestIntegrationEvent>
     {
         public Task Handle(TestIntegrationEvent @event)
         {
@@ -153,7 +153,7 @@ public class InMemoryEventBusSubscriptionsManagerTests
         }
     }
 
-    private class AnotherTestIntegrationEventHandler : IIntegrationEventHandler<AnotherTestIntegrationEvent>
+    private class AnotherTestIntegrationEventHandler : IChirpIntegrationEventHandler<AnotherTestIntegrationEvent>
     {
         public Task Handle(AnotherTestIntegrationEvent @event)
         {
@@ -161,7 +161,7 @@ public class InMemoryEventBusSubscriptionsManagerTests
         }
     }
 
-    private class AnotherHandlerForTestEvent : IIntegrationEventHandler<TestIntegrationEvent>
+    private class AnotherHandlerForTestEvent : IChirpIntegrationEventHandler<TestIntegrationEvent>
     {
         public Task Handle(TestIntegrationEvent @event)
         {
