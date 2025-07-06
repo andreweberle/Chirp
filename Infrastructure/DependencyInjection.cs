@@ -46,7 +46,7 @@ public static class DependencyInjection
     /// <param name="configureOptions">Action to configure options</param>
     /// <param name="configuration">The configuration (required)</param>
     /// <returns>The service collection</returns>
-    private static IServiceCollection AddChirp(
+    public static IServiceCollection AddChirp(
         this IServiceCollection services,
         Action<ChirpOptions> configureOptions,
         IConfiguration configuration)
