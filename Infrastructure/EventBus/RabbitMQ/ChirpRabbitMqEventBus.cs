@@ -76,8 +76,10 @@ public class ChirpRabbitMqEventBus : EventBusBase
         }
         catch (Exception ex)
         {
+            // TODO: Create flag to control whether to throw or not
             Console.WriteLine($"Warning: Failed to initialize RabbitMQ infrastructure during startup: {ex.Message}");
-            Console.WriteLine("The event bus will attempt to reconnect on first use.");
+            throw;
+            //Console.WriteLine("The event bus will attempt to reconnect on first use.");
             // Don't throw - allow the application to start
             // Initialization will be retried on first Publish/Subscribe call
         }
