@@ -5,6 +5,6 @@ namespace Chirp.Application.Interfaces;
 public interface IChirpRabbitMqConnection
 {
     public bool IsConnected { get; }
-    public void TryConnect();
+    public bool TryConnect();
     public IModel CreateModel();
 }

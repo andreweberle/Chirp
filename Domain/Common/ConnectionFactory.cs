@@ -2,8 +2,7 @@
 
 public static class ConnectionFactory
 {
-    public static RabbitMQ.Client.IConnectionFactory CreateConnectionFactory(string host, string username,
-        string password)
+    public static RabbitMQ.Client.IConnectionFactory CreateConnectionFactory(string host, string username, string password)
     {
         return new RabbitMQ.Client.ConnectionFactory
         {
@@ -11,7 +10,10 @@ public static class ConnectionFactory
             HostName = host,
             UserName = username,
             Password = password,
-            DispatchConsumersAsync = true
+            DispatchConsumersAsync = true,
+            AutomaticRecoveryEnabled = true,
+            TopologyRecoveryEnabled = true,
+            NetworkRecoveryInterval = TimeSpan.FromSeconds(5),
         };
     }
 }

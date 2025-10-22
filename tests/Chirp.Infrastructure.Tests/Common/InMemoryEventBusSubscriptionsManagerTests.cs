@@ -11,7 +11,7 @@ public class InMemoryEventBusSubscriptionsManagerTests
     public void IsEmptyInitialStateReturnsTrue()
     {
         // Arrange
-        InMemoryEventBusSubscriptionsManager manager = new InMemoryEventBusSubscriptionsManager();
+        InMemoryEventBusSubscriptionsManager manager = new();
 
         // Assert
         Assert.IsTrue(manager.IsEmpty);
@@ -21,7 +21,7 @@ public class InMemoryEventBusSubscriptionsManagerTests
     public void AddSubscriptionAddsHandlerForEvent()
     {
         // Arrange
-        InMemoryEventBusSubscriptionsManager manager = new InMemoryEventBusSubscriptionsManager();
+        InMemoryEventBusSubscriptionsManager manager = new();
 
         // Act
         manager.AddSubscription<TestIntegrationEvent, TestIntegrationEventHandler>();
@@ -36,7 +36,7 @@ public class InMemoryEventBusSubscriptionsManagerTests
     public void GetHandlersForEventReturnsCorrectHandler()
     {
         // Arrange
-        InMemoryEventBusSubscriptionsManager manager = new InMemoryEventBusSubscriptionsManager();
+        InMemoryEventBusSubscriptionsManager manager = new();
         manager.AddSubscription<TestIntegrationEvent, TestIntegrationEventHandler>();
 
         // Act
@@ -52,7 +52,7 @@ public class InMemoryEventBusSubscriptionsManagerTests
     public void RemoveSubscriptionRemovesHandlerForEvent()
     {
         // Arrange
-        InMemoryEventBusSubscriptionsManager manager = new InMemoryEventBusSubscriptionsManager();
+        InMemoryEventBusSubscriptionsManager manager = new();
         manager.AddSubscription<TestIntegrationEvent, TestIntegrationEventHandler>();
 
         // Act
@@ -67,7 +67,7 @@ public class InMemoryEventBusSubscriptionsManagerTests
     public void GetEventTypeByNameReturnsCorrectType()
     {
         // Arrange
-        InMemoryEventBusSubscriptionsManager manager = new InMemoryEventBusSubscriptionsManager();
+        InMemoryEventBusSubscriptionsManager manager = new();
         manager.AddSubscription<TestIntegrationEvent, TestIntegrationEventHandler>();
         string eventName = manager.GetEventKey<TestIntegrationEvent>();
 
@@ -83,7 +83,7 @@ public class InMemoryEventBusSubscriptionsManagerTests
     public void GetEventTypeByNameNonExistentEventNameReturnsNull()
     {
         // Arrange
-        InMemoryEventBusSubscriptionsManager manager = new InMemoryEventBusSubscriptionsManager();
+        InMemoryEventBusSubscriptionsManager manager = new();
 
         // Act
         Type? eventType = manager.GetEventTypeByName("NonExistentEventName");
@@ -96,7 +96,7 @@ public class InMemoryEventBusSubscriptionsManagerTests
     public void ClearRemovesAllSubscriptions()
     {
         // Arrange
-        InMemoryEventBusSubscriptionsManager manager = new InMemoryEventBusSubscriptionsManager();
+        InMemoryEventBusSubscriptionsManager manager = new();
         manager.AddSubscription<TestIntegrationEvent, TestIntegrationEventHandler>();
         manager.AddSubscription<AnotherTestIntegrationEvent, AnotherTestIntegrationEventHandler>();
 
@@ -111,7 +111,7 @@ public class InMemoryEventBusSubscriptionsManagerTests
     public void AddMultipleSubscriptionsForSameEventRegistersBoth()
     {
         // Arrange
-        InMemoryEventBusSubscriptionsManager manager = new InMemoryEventBusSubscriptionsManager();
+        InMemoryEventBusSubscriptionsManager manager = new();
 
         // Act
         manager.AddSubscription<TestIntegrationEvent, TestIntegrationEventHandler>();
@@ -126,7 +126,7 @@ public class InMemoryEventBusSubscriptionsManagerTests
     public void RemoveOneOfMultipleSubscriptionsLeavesOthers()
     {
         // Arrange
-        InMemoryEventBusSubscriptionsManager manager = new InMemoryEventBusSubscriptionsManager();
+        InMemoryEventBusSubscriptionsManager manager = new();
         manager.AddSubscription<TestIntegrationEvent, TestIntegrationEventHandler>();
         manager.AddSubscription<TestIntegrationEvent, AnotherHandlerForTestEvent>();
 

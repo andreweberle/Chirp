@@ -31,8 +31,12 @@ public class ChirpRabbitMqEventBus : EventBusBase
     private readonly string? _queueName;
     private readonly IChirpRabbitMqConnection _rabbitMQConnection;
     private readonly int _retryMax;
-    private IModel _consumerChannel;
-    private readonly object _lockObject = new object();
+    private IModel? _consumerChannel;
+    private readonly object _lockObject = new();
+    private bool _initialized = false;
+
+    private string ExchangeName { get; }
+    private string DlxExchangeName { get; }
 
     /// <summary>
     /// Initializes a new instance of RabbitMQEventBus
@@ -55,17 +59,39 @@ public class ChirpRabbitMqEventBus : EventBusBase
         string dlxExchangeName = "_dlxExchangeName")
         : base(eventBusSubscriptionsManager, serviceProvider)
     {
+        _rabbitMQConnection = rabbitMQConnection ?? throw new ArgumentNullException(nameof(rabbitMQConnection));
         ExchangeName = exchangeName ?? throw new ArgumentNullException(nameof(exchangeName));
         DlxExchangeName = dlxExchangeName ?? throw new ArgumentNullException(nameof(dlxExchangeName));
 
         _queueName = queueName;
         _dlxQueueName = $"dlx.{_queueName}";
-
-        _rabbitMQConnection = rabbitMQConnection ?? throw new ArgumentNullException(nameof(rabbitMQConnection));
         _retryMax = retryMax;
+
+        // Defer initialization to allow application to start even if RabbitMQ is unavailable
+        // This prevents UseChirp() from blocking application startup
+        try
+        {
+            InitializeInfrastructure();
+            _initialized = true;
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Warning: Failed to initialize RabbitMQ infrastructure during startup: {ex.Message}");
+            Console.WriteLine("The event bus will attempt to reconnect on first use.");
+            // Don't throw - allow the application to start
+            // Initialization will be retried on first Publish/Subscribe call
+        }
+    }
+
+    /// <summary>
+    /// Initializes the RabbitMQ infrastructure (exchanges, queues, channels)
+    /// </summary>
+    private void InitializeInfrastructure()
+    {
+        // Create consumer channel
         _consumerChannel = CreateConsumerChannel();
 
-        // Create DLX
+        // Create DLX infrastructure
         using IModel channel = _rabbitMQConnection.CreateModel();
 
         // Create Exchange.
@@ -78,8 +104,30 @@ public class ChirpRabbitMqEventBus : EventBusBase
         channel.QueueBind(_dlxQueueName, DlxExchangeName, _dlxQueueName);
     }
 
-    private string ExchangeName { get; }
-    private string DlxExchangeName { get; }
+    /// <summary>
+    /// Ensures infrastructure is initialized, attempting to initialize if not already done
+    /// </summary>
+    private void EnsureInitialized()
+    {
+        if (_initialized) return;
+
+        lock (_lockObject)
+        {
+            if (_initialized) return;
+
+            try
+            {
+                InitializeInfrastructure();
+                _initialized = true;
+                Console.WriteLine("Successfully initialized RabbitMQ infrastructure on retry.");
+            }
+            catch (Exception ex)
+            {
+                throw new InvalidOperationException(
+                    "RabbitMQ connection is not available. Ensure RabbitMQ is running and accessible.", ex);
+            }
+        }
+    }
 
     /// <summary>
     /// Publishes an event to RabbitMQ
@@ -87,6 +135,9 @@ public class ChirpRabbitMqEventBus : EventBusBase
     /// <param name="event">The event to publish</param>
     public override void Publish(IntegrationEvent @event)
     {
+        // Ensure infrastructure is initialized
+        EnsureInitialized();
+
         // Confirm Connection.
         if (!_rabbitMQConnection.IsConnected) _rabbitMQConnection.TryConnect();
 
@@ -126,6 +177,9 @@ public class ChirpRabbitMqEventBus : EventBusBase
     /// <typeparam name="TH">The event handler type</typeparam>
     public override void Subscribe<T, TH>()
     {
+// Ensure infrastructure is initialized
+        EnsureInitialized();
+
         // Try Connect If Required.
         if (!_rabbitMQConnection.IsConnected) _rabbitMQConnection.TryConnect();
 
@@ -153,8 +207,12 @@ public class ChirpRabbitMqEventBus : EventBusBase
     {
         lock (_lockObject)
         {
-            if (_consumerChannel == null) return;
-            
+            if (_consumerChannel == null)
+            {
+                Console.WriteLine("Warning: Consumer channel is not initialized. Skipping StartConsume.");
+                return;
+            }
+
             try
             {
                 AsyncEventingBasicConsumer consumer = new(_consumerChannel);
@@ -283,11 +341,11 @@ public class ChirpRabbitMqEventBus : EventBusBase
         // Important fix: Use ServiceProvider directly first to try to find singleton/transient handlers
         // that might have been directly retrieved in tests
         IEnumerable<SubscriptionInfo> subscriptions = SubscriptionsManager.GetHandlersForEvent(eventName);
-        
+
         // Process using both ServiceProvider and a new scope to ensure handlers are found
         // in various registration scenarios
         bool anyHandled = await ProcessHandlers(subscriptions, ServiceProvider, eventName, message);
-        
+
         // If no handlers were found in the root provider, try with a scope
         if (!anyHandled)
         {
@@ -295,18 +353,18 @@ public class ChirpRabbitMqEventBus : EventBusBase
             await ProcessHandlers(subscriptions, scope.ServiceProvider, eventName, message);
         }
     }
-    
+
     /// <summary>
     /// Process event handlers from a specific service provider
     /// </summary>
     private async Task<bool> ProcessHandlers(
-        IEnumerable<SubscriptionInfo> subscriptions, 
-        IServiceProvider provider, 
-        string eventName, 
+        IEnumerable<SubscriptionInfo> subscriptions,
+        IServiceProvider provider,
+        string eventName,
         string message)
     {
         bool anyHandled = false;
-        
+
         foreach (SubscriptionInfo subscription in subscriptions)
         {
             object? handler = provider.GetService(subscription.HandlerType);
@@ -336,7 +394,7 @@ public class ChirpRabbitMqEventBus : EventBusBase
 
             Type concreteType = typeof(IChirpIntegrationEventHandler<>).MakeGenericType(eventType);
             var handleMethod = concreteType.GetMethod("Handle");
-            
+
             if (handleMethod != null)
             {
                 await Task.Yield();
@@ -348,7 +406,7 @@ public class ChirpRabbitMqEventBus : EventBusBase
                 throw new Exception($"Handle method not found on handler {handler.GetType().Name}");
             }
         }
-        
+
         return anyHandled;
     }
 
@@ -365,40 +423,41 @@ public class ChirpRabbitMqEventBus : EventBusBase
 
             channel.ExchangeDeclare(ExchangeName, ExchangeType.Direct, true);
             channel.QueueDeclare(_queueName, true, false, false, null);
-            
+
             // Improved exception handling for channel callbacks
             channel.CallbackException += (sender, ea) =>
             {
                 try
                 {
                     Console.WriteLine($"RabbitMQ channel exception: {ea.Exception.Message}");
-                    
+
                     // Safely dispose the existing channel
                     IModel oldChannel = _consumerChannel;
                     _consumerChannel = null; // Prevent reuse
 
-                    try 
+                    try
                     {
                         if (oldChannel?.IsOpen == true)
                         {
                             oldChannel.Close();
                         }
+
                         oldChannel?.Dispose();
                     }
                     catch (Exception disposeEx)
                     {
                         Console.WriteLine($"Error disposing channel: {disposeEx.Message}");
                     }
-                    
+
                     // Wait a brief moment before reconnecting
                     Task.Delay(500).Wait();
-                    
+
                     // Try to connect and check if successful
                     if (!_rabbitMQConnection.IsConnected)
                     {
                         _rabbitMQConnection.TryConnect();
                     }
-                    
+
                     // Only proceed if connection is established
                     if (_rabbitMQConnection.IsConnected)
                     {

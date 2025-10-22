@@ -1,5 +1,4 @@
 using Chirp.Domain.Common;
-using System;
 
 namespace Chirp.Application.Common.EventBusOptions;
 
@@ -69,4 +68,24 @@ public class RabbitMqChirpOptions : ChirpOptions
     /// Whether messages should be persistent
     /// </summary>
     public bool PersistentMessages { get; set; } = true;
+
+    /// <summary>
+    /// Gets or sets a value indicating whether automatic recovery is enabled.
+    /// </summary>
+    public bool AutomaticRecoveryEnabled { get; set; } = true;
+
+    /// <summary>
+    /// Gets or sets a value indicating whether topology recovery is enabled.
+    /// </summary>
+    public bool TopologyRecoveryEnabled { get; set; } = true;
+
+    /// <summary>
+    /// Gets or sets the network recovery interval.
+    /// </summary>
+    public TimeSpan NetworkRecoveryInterval { get; set; } = TimeSpan.FromSeconds(10);
+    
+    /// <summary>
+    /// Gets or sets the requested heartbeat interval.
+    /// </summary>
+    public TimeSpan RequestedHeartbeat { get; set; } = TimeSpan.FromSeconds(60);
 }

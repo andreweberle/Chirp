@@ -6,7 +6,9 @@ namespace Chirp.Infrastructure.EventBus;
 /// <summary>
 /// Abstract base class for event bus implementations to share common functionality
 /// </summary>
-public abstract class EventBusBase(IChirpEventBusSubscriptionsManager subscriptionsManager, IServiceProvider serviceProvider)
+public abstract class EventBusBase(
+    IChirpEventBusSubscriptionsManager subscriptionsManager,
+    IServiceProvider serviceProvider)
     : IChirpEventBus
 {
     protected readonly IChirpEventBusSubscriptionsManager SubscriptionsManager =

@@ -193,9 +193,10 @@ public static class EventBusFactory
         RabbitMqChirpOptions options)
     {
         // Get the RabbitMQ connection
-        IChirpRabbitMqConnection connection = serviceProvider.GetService(typeof(IChirpRabbitMqConnection)) as IChirpRabbitMqConnection
-                                         ?? throw new InvalidOperationException(
-                                             "RabbitMQ connection not registered in service provider");
+        IChirpRabbitMqConnection connection =
+            serviceProvider.GetService(typeof(IChirpRabbitMqConnection)) as IChirpRabbitMqConnection
+            ?? throw new InvalidOperationException(
+                "RabbitMQ connection not registered in service provider");
 
         // Create the RabbitMQ event bus using options properties
         return new ChirpRabbitMqEventBus(
@@ -216,9 +217,10 @@ public static class EventBusFactory
         int retryCount)
     {
         // Get the RabbitMQ connection
-        IChirpRabbitMqConnection connection = serviceProvider.GetService(typeof(IChirpRabbitMqConnection)) as IChirpRabbitMqConnection
-                                         ?? throw new InvalidOperationException(
-                                             "RabbitMQ connection not registered in service provider");
+        IChirpRabbitMqConnection connection =
+            serviceProvider.GetService(typeof(IChirpRabbitMqConnection)) as IChirpRabbitMqConnection
+            ?? throw new InvalidOperationException(
+                "RabbitMQ connection not registered in service provider");
 
         // Get exchange names from configuration (with defaults)
         string exchangeName = configuration["RMQ:ExchangeName"] ?? "lithoconnect_event_bus";
@@ -334,8 +336,9 @@ public static class EventBusFactory
 
         if (string.IsNullOrEmpty(deadLetterQueueUrl))
         {
-            deadLetterQueueUrl = configuration["AWS:DeadLetterQueueUrl"] 
-                ?? throw new ArgumentNullException("DeadLetterQueueUrl is missing from options and AWS:DeadLetterQueueUrl is missing from configuration");
+            deadLetterQueueUrl = configuration["AWS:DeadLetterQueueUrl"]
+                                 ?? throw new ArgumentNullException(
+                                     "DeadLetterQueueUrl is missing from options and AWS:DeadLetterQueueUrl is missing from configuration");
         }
 
         // Create the Amazon SQS event bus

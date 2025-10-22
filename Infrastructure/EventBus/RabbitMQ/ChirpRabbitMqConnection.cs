@@ -1,101 +1,168 @@
-using System.Diagnostics;
 using Chirp.Application.Interfaces;
 using Polly;
+using Polly.Retry;
+using Polly.Timeout;
 using RabbitMQ.Client;
 using RabbitMQ.Client.Events;
+using RabbitMQ.Client.Exceptions;
+using System.Diagnostics;
+using System.Net.Sockets;
 
 namespace Chirp.Infrastructure.EventBus.RabbitMQ;
 
-/// <summary>
-/// Implementation of IRabbitMqConnection that manages connection to RabbitMQ
-/// </summary>
-internal class ChirpRabbitMqConnection(IConnectionFactory connectionFactory) : IChirpRabbitMqConnection, IDisposable
+internal sealed class ChirpRabbitMqConnection : IChirpRabbitMqConnection, IDisposable
 {
-    private static readonly Policy Policy = Policy
-        .Handle<Exception>()
-        .WaitAndRetry(10, retryAttempt => TimeSpan.FromSeconds(Math.Pow(2, retryAttempt)),
-            (ex, time) =>
-            {
-                Debug.WriteLine(
-                    $"RabbitMQ Client could not connect after {time.TotalSeconds:n1}s ({ex.Message}). Retrying...");
-            });
+    private readonly IConnectionFactory _connectionFactory;
+    private readonly Lock _sync = new();
 
-    private readonly IConnectionFactory _connectionFactory = connectionFactory;
-    private readonly Lock _lockSync = new();
     private IConnection? _connection;
     private bool _disposed;
+    private int _isReconnecting; // 0 = no, 1 = yes
 
-    public void Dispose()
-    {
-        _connection?.Dispose();
-        _disposed = true;
-    }
+    // Short, bounded retry with jitter
+    private static readonly Random _rng = new();
 
-    /// <summary>
-    /// Indicates if connection to RabbitMQ is established
-    /// </summary>
+    private static readonly AsyncRetryPolicy _retry =
+        Policy.Handle<Exception>()
+            .WaitAndRetryAsync(
+                5,
+                attempt =>
+                {
+                    TimeSpan baseDelay =
+                        TimeSpan.FromMilliseconds(250 * Math.Pow(2, attempt - 1)); // 250ms, 500ms, 1s, 2s, 4s
+                    TimeSpan jitter = TimeSpan.FromMilliseconds(_rng.Next(0, 250));
+                    return baseDelay + jitter;
+                },
+                (ex, delay, attempt, ctx) =>
+                {
+                    Debug.WriteLine(
+                        $"RabbitMQ connect retry {attempt} in {delay.TotalMilliseconds:n0} ms: {ex.Message}");
+                    return Task.CompletedTask;
+                });
+
+    // Guard each connect attempt with a timeout so the app never sits forever
+    private static readonly AsyncTimeoutPolicy _timeout = Policy.TimeoutAsync(TimeSpan.FromSeconds(5)); // per attempt
+
+    private static readonly IAsyncPolicy _policy = Policy.WrapAsync(_retry, _timeout);
+
+    public ChirpRabbitMqConnection(IConnectionFactory connectionFactory) => _connectionFactory = connectionFactory;
+
     public bool IsConnected => _connection is { IsOpen: true } && !_disposed;
 
-    /// <summary>
-    /// Creates a channel model for communication with RabbitMQ
-    /// </summary>
     public IModel CreateModel()
-     {
-        if (!IsConnected) TryConnect();
-        return _connection?.CreateModel()!;
+    {
+        if (!IsConnected && !TryConnect())
+        {
+            throw new InvalidOperationException("RabbitMQ connection is not available.");
+        }
+
+        return _connection!.CreateModel();
     }
 
     /// <summary>
-    /// Attempts to connect to RabbitMQ with retry policy
+    /// Try to connect, returning false quickly if not possible.
+    /// Never blocks the calling thread for long.
     /// </summary>
-    public void TryConnect()
+    public bool TryConnect()
     {
-        lock (_lockSync)
-        {
-            // Execute the policy.
-            Policy.Execute(() =>
-            {
-                try
-                {
-                    _connection = _connectionFactory.CreateConnection();
+        if (_disposed) return false;
 
-                    if (IsConnected)
-                    {
-                        _connection.CallbackException += Connection_CallbackException;
-                        _connection.ConnectionBlocked += Connection_ConnectionBlocked;
-                        _connection.ConnectionShutdown += Connection_ConnectionShutdown;
-                    }
-                    else
-                    {
-                        // Retry connection establishment
-                        throw new Exception("Connection not established.");
-                    }
-                }
-                catch (Exception ex)
-                {
-                    // Handle any unanticipated exceptions here
-                    Debug.WriteLine($"An error occurred during connection establishment: {ex.Message}");
-                    throw; // Rethrow to let Polly handle retries
-                }
-            });
+        using (_sync.EnterScope())
+        {
+            // Prevent concurrent reconnect loops
+            if (_isReconnecting != 0) return IsConnected;
+
+            _isReconnecting = 1;
+        }
+
+        try
+        {
+            // Run the connect attempt with timeout + retries OFF the lock
+            IConnection connection = _policy.ExecuteAsync(async () =>
+            {
+                // Offload sync CreateConnection to a worker so timeout can cancel it
+                Task<IConnection> task = Task.Run(() => _connectionFactory.CreateConnection());
+                return await task; // timeout policy wraps this
+            }).GetAwaiter().GetResult();
+
+            // Only lock to swap the connection and attach handlers
+            using (_sync.EnterScope())
+            {
+                _connection?.Dispose();
+                _connection = connection;
+                _connection.CallbackException += OnCallbackException;
+                _connection.ConnectionBlocked += OnConnectionBlocked;
+                _connection.ConnectionShutdown += OnConnectionShutdown;
+            }
+
+            Debug.WriteLine("RabbitMQ connected.");
+            return true;
+        }
+        catch (TimeoutRejectedException)
+        {
+            Debug.WriteLine("RabbitMQ connect attempt timed out.");
+            return false;
+        }
+        catch (BrokerUnreachableException ex)
+        {
+            Debug.WriteLine($"RabbitMQ unreachable: {ex.Message}");
+            return false;
+        }
+        catch (SocketException ex)
+        {
+            Debug.WriteLine($"Socket error reaching RabbitMQ: {ex.Message}");
+            return false;
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"RabbitMQ connect failed: {ex.Message}");
+            return false;
+        }
+        finally
+        {
+            using (_sync.EnterScope())
+            {
+                _isReconnecting = 0;
+            }
         }
     }
 
-    private void Connection_ConnectionShutdown(object? sender, ShutdownEventArgs e)
+    private void OnConnectionShutdown(object? s, ShutdownEventArgs e)
     {
         if (_disposed) return;
-        TryConnect();
+        Debug.WriteLine($"RabbitMQ shutdown: {e.ReplyText}");
+        _ = TryConnect(); // fire-and-forget; guarded by _isReconnecting
     }
 
-    private void Connection_ConnectionBlocked(object? sender, ConnectionBlockedEventArgs e)
+    private void OnConnectionBlocked(object? s, ConnectionBlockedEventArgs e)
     {
         if (_disposed) return;
-        TryConnect();
+        Debug.WriteLine($"RabbitMQ blocked: {e.Reason}");
+        _ = TryConnect();
     }
 
-    private void Connection_CallbackException(object? sender, CallbackExceptionEventArgs e)
+    private void OnCallbackException(object? s, CallbackExceptionEventArgs e)
     {
         if (_disposed) return;
-        TryConnect();
+        Debug.WriteLine($"RabbitMQ callback exception: {e.Exception.Message}");
+        _ = TryConnect();
+    }
+
+    public void Dispose()
+    {
+        if (_disposed) return;
+        _disposed = true;
+
+        using (_sync.EnterScope())
+        {
+            if (_connection != null)
+            {
+                _connection.CallbackException -= OnCallbackException;
+                _connection.ConnectionBlocked -= OnConnectionBlocked;
+                _connection.ConnectionShutdown -= OnConnectionShutdown;
+                _connection.Dispose();
+                _connection = null;
+            }
+        }
     }
 }
