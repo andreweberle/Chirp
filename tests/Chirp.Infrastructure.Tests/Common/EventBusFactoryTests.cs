@@ -54,7 +54,7 @@ public class EventBusFactoryTests
     {
         // Arrange
         var serviceCollection = new ServiceCollection();
-        
+
         // Create a connection factory using the test container
         var connectionFactory = new ConnectionFactory
         {
@@ -64,26 +64,26 @@ public class EventBusFactoryTests
             Password = _password,
             DispatchConsumersAsync = true
         };
-        
+
         // Create the connection
         var connection = new TestRabbitMqConnection(connectionFactory);
-        
+
         // Register the connection with the service provider
         serviceCollection.AddSingleton<IChirpRabbitMqConnection>(connection);
         var serviceProvider = serviceCollection.BuildServiceProvider();
-        
+
         // Create mock configuration
-        Mock<IConfiguration> mockConfiguration = new Mock<IConfiguration>();
+        Mock<IConfiguration> mockConfiguration = new();
         mockConfiguration.Setup(c => c["RMQ:ExchangeName"]).Returns("test_exchange");
         mockConfiguration.Setup(c => c["RMQ:ExchangeNameDLX"]).Returns("test_dlx_exchange");
-        
+
         // Act
         var eventBus = EventBusFactory.Create(
-            EventBusType.RabbitMQ, 
-            serviceProvider, 
-            mockConfiguration.Object, 
+            EventBusType.RabbitMQ,
+            serviceProvider,
+            mockConfiguration.Object,
             "test_queue");
-        
+
         // Assert
         Assert.IsNotNull(eventBus);
         Assert.IsInstanceOfType(eventBus, typeof(ChirpRabbitMqEventBus));
@@ -94,7 +94,7 @@ public class EventBusFactoryTests
     {
         // Arrange
         var serviceCollection = new ServiceCollection();
-        
+
         // Create a connection factory using the test container
         var connectionFactory = new ConnectionFactory
         {
@@ -104,29 +104,29 @@ public class EventBusFactoryTests
             Password = _password,
             DispatchConsumersAsync = true
         };
-        
+
         // Create the connection
         var connection = new TestRabbitMqConnection(connectionFactory);
-        
+
         // Register the connection with the service provider
         serviceCollection.AddSingleton<IChirpRabbitMqConnection>(connection);
         var serviceProvider = serviceCollection.BuildServiceProvider();
-        
+
         // Create mock configuration with null exchange names to trigger defaults
-        Mock<IConfiguration> mockConfiguration = new Mock<IConfiguration>();
-        
+        Mock<IConfiguration> mockConfiguration = new();
+
         // Fix warnings by returning null as string? instead of null directly
         string? nullExchangeName = null;
         mockConfiguration.Setup(c => c["RMQ:ExchangeName"]).Returns(nullExchangeName);
         mockConfiguration.Setup(c => c["RMQ:ExchangeNameDLX"]).Returns(nullExchangeName);
-        
+
         // Act
         var eventBus = EventBusFactory.Create(
-            EventBusType.RabbitMQ, 
-            serviceProvider, 
-            mockConfiguration.Object, 
+            EventBusType.RabbitMQ,
+            serviceProvider,
+            mockConfiguration.Object,
             "test_queue");
-        
+
         // Assert
         Assert.IsNotNull(eventBus);
         Assert.IsInstanceOfType(eventBus, typeof(ChirpRabbitMqEventBus));
@@ -140,7 +140,7 @@ public class EventBusFactoryTests
     {
         // Arrange
         Mock<IServiceProvider> mockServiceProvider = new();
-        Mock<IConfiguration> mockConfiguration = new Mock<IConfiguration>();
+        Mock<IConfiguration> mockConfiguration = new();
 
         // Set up service provider to return null for connection (not registered)
         mockServiceProvider
@@ -160,8 +160,8 @@ public class EventBusFactoryTests
     public void CreateKafkaEventBusTypeThrowsNotImplementedException()
     {
         // Arrange
-        Mock<IServiceProvider> mockServiceProvider = new Mock<IServiceProvider>();
-        Mock<IConfiguration> mockConfiguration = new Mock<IConfiguration>();
+        Mock<IServiceProvider> mockServiceProvider = new();
+        Mock<IConfiguration> mockConfiguration = new();
 
         // Act - should throw NotImplementedException
         EventBusFactory.Create(
@@ -176,8 +176,8 @@ public class EventBusFactoryTests
     public void CreateAzureServiceBusEventBusTypeThrowsNotImplementedException()
     {
         // Arrange
-        Mock<IServiceProvider> mockServiceProvider = new Mock<IServiceProvider>();
-        Mock<IConfiguration> mockConfiguration = new Mock<IConfiguration>();
+        Mock<IServiceProvider> mockServiceProvider = new();
+        Mock<IConfiguration> mockConfiguration = new();
 
         // Act - should throw NotImplementedException
         EventBusFactory.Create(
@@ -192,8 +192,8 @@ public class EventBusFactoryTests
     public void CreateAmazonSqsEventBusTypeThrowsNotImplementedException()
     {
         // Arrange
-        Mock<IServiceProvider> mockServiceProvider = new Mock<IServiceProvider>();
-        Mock<IConfiguration> mockConfiguration = new Mock<IConfiguration>();
+        Mock<IServiceProvider> mockServiceProvider = new();
+        Mock<IConfiguration> mockConfiguration = new();
 
         // Act - should throw NotImplementedException
         EventBusFactory.Create(
@@ -208,8 +208,8 @@ public class EventBusFactoryTests
     public void CreateRedisEventBusTypeThrowsNotImplementedException()
     {
         // Arrange
-        Mock<IServiceProvider> mockServiceProvider = new Mock<IServiceProvider>();
-        Mock<IConfiguration> mockConfiguration = new Mock<IConfiguration>();
+        Mock<IServiceProvider> mockServiceProvider = new();
+        Mock<IConfiguration> mockConfiguration = new();
 
         // Act - should throw NotImplementedException
         EventBusFactory.Create(
@@ -224,8 +224,8 @@ public class EventBusFactoryTests
     public void CreateGooglePubSubEventBusTypeThrowsNotImplementedException()
     {
         // Arrange
-        Mock<IServiceProvider> mockServiceProvider = new Mock<IServiceProvider>();
-        Mock<IConfiguration> mockConfiguration = new Mock<IConfiguration>();
+        Mock<IServiceProvider> mockServiceProvider = new();
+        Mock<IConfiguration> mockConfiguration = new();
 
         // Act - should throw NotImplementedException
         EventBusFactory.Create(
@@ -240,8 +240,8 @@ public class EventBusFactoryTests
     public void CreateNATSEventBusTypeThrowsNotImplementedException()
     {
         // Arrange
-        Mock<IServiceProvider> mockServiceProvider = new Mock<IServiceProvider>();
-        Mock<IConfiguration> mockConfiguration = new Mock<IConfiguration>();
+        Mock<IServiceProvider> mockServiceProvider = new();
+        Mock<IConfiguration> mockConfiguration = new();
 
         // Act - should throw NotImplementedException
         EventBusFactory.Create(
@@ -256,8 +256,8 @@ public class EventBusFactoryTests
     public void CreateInvalidEventBusTypeThrowsArgumentException()
     {
         // Arrange
-        Mock<IServiceProvider> mockServiceProvider = new Mock<IServiceProvider>();
-        Mock<IConfiguration> mockConfiguration = new Mock<IConfiguration>();
+        Mock<IServiceProvider> mockServiceProvider = new();
+        Mock<IConfiguration> mockConfiguration = new();
 
         // Act - should throw ArgumentException
         EventBusFactory.Create(
@@ -282,9 +282,17 @@ public class EventBusFactoryTests
 
         public bool IsConnected => _connection is { IsOpen: true };
 
-        public void TryConnect()
+        public bool TryConnect()
         {
-            _connection = _connectionFactory.CreateConnection();
+            try
+            {
+                _connection = _connectionFactory.CreateConnection();
+                return true;
+            }
+            catch
+            {
+                return false;
+            }
         }
 
         public IModel CreateModel()

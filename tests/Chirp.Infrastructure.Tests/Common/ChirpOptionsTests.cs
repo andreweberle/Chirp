@@ -144,7 +144,7 @@ public class ChirpOptionsTests
         options.AddConsumer<TestHandler>();
 
         // Use reflection to access internal members
-        var consumersProperty = typeof(ChirpOptions).GetProperty("Consumers", 
+        var consumersProperty = typeof(ChirpOptions).GetProperty("Consumers",
             System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
         var consumers = consumersProperty?.GetValue(options) as System.Collections.IList;
 
@@ -179,7 +179,7 @@ public class ChirpOptionsTests
             .AddConsumer<AnotherTestHandler>();
 
         // Use reflection to access internal members
-        var consumersProperty = typeof(ChirpOptions).GetProperty("Consumers", 
+        var consumersProperty = typeof(ChirpOptions).GetProperty("Consumers",
             System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
         var consumers = consumersProperty?.GetValue(options) as System.Collections.IList;
 
@@ -189,6 +189,11 @@ public class ChirpOptionsTests
     }
 
     // Test classes for consumer registration tests
-    private class TestHandler { }
-    private class AnotherTestHandler { }
+    private class TestHandler
+    {
+    }
+
+    private class AnotherTestHandler
+    {
+    }
 }

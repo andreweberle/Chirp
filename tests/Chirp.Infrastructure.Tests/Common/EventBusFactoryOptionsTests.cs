@@ -64,10 +64,10 @@ public class EventBusFactoryOptionsTests
         };
 
         // Arrange
-        ServiceCollection serviceCollection = new ServiceCollection();
+        ServiceCollection serviceCollection = new();
 
         // Create a connection factory using the test container
-        ConnectionFactory connectionFactory = new ConnectionFactory
+        ConnectionFactory connectionFactory = new()
         {
             HostName = _hostname,
             Port = _port,
@@ -77,11 +77,11 @@ public class EventBusFactoryOptionsTests
         };
 
         // Create the connection
-        TestRabbitMqConnection connection = new TestRabbitMqConnection(connectionFactory);
+        TestRabbitMqConnection connection = new(connectionFactory);
 
         // Create mock configuration
-        Mock<IConfiguration> mockConfiguration = new Mock<IConfiguration>();
-        
+        Mock<IConfiguration> mockConfiguration = new();
+
         // Register the connection with the service provider
         serviceCollection.AddSingleton<IChirpRabbitMqConnection>(connection);
         ServiceProvider serviceProvider = serviceCollection.BuildServiceProvider();
@@ -140,10 +140,10 @@ public class EventBusFactoryOptionsTests
         };
 
         // Arrange
-        ServiceCollection serviceCollection = new ServiceCollection();
+        ServiceCollection serviceCollection = new();
 
         // Create a connection factory using the test container
-        ConnectionFactory connectionFactory = new ConnectionFactory
+        ConnectionFactory connectionFactory = new()
         {
             HostName = _hostname,
             Port = _port,
@@ -153,10 +153,10 @@ public class EventBusFactoryOptionsTests
         };
 
         // Create the connection
-        TestRabbitMqConnection connection = new TestRabbitMqConnection(connectionFactory);
+        TestRabbitMqConnection connection = new(connectionFactory);
 
         // Create mock configuration
-        Mock<IConfiguration> mockConfiguration = new Mock<IConfiguration>();
+        Mock<IConfiguration> mockConfiguration = new();
 
         // Register the connection with the service provider
         serviceCollection.AddSingleton<IChirpRabbitMqConnection>(connection);
@@ -179,7 +179,8 @@ public class EventBusFactoryOptionsTests
         // Verify the connection was requested
         IChirpRabbitMqConnection? connectionService = serviceProvider.GetService<IChirpRabbitMqConnection>();
         Assert.IsNotNull(connectionService, "IChirpRabbitMqConnection should be registered in the service provider.");
-        Assert.IsInstanceOfType<TestRabbitMqConnection>(connectionService, "Connection should be of type TestRabbitMqConnection.");
+        Assert.IsInstanceOfType<TestRabbitMqConnection>(connectionService,
+            "Connection should be of type TestRabbitMqConnection.");
         Assert.IsTrue(connectionService.IsConnected, "Connection should be established successfully.");
     }
 
@@ -219,9 +220,17 @@ public class EventBusFactoryOptionsTests
 
         public bool IsConnected => _connection is { IsOpen: true };
 
-        public void TryConnect()
+        public bool TryConnect()
         {
-            _connection = _connectionFactory.CreateConnection();
+            try
+            {
+                _connection = _connectionFactory.CreateConnection();
+                return true;
+            }
+            catch
+            {
+                return false;
+            }
         }
 
         public IModel CreateModel()
