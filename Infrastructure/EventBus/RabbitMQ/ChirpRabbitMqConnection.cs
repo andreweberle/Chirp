@@ -37,7 +37,7 @@ internal sealed class ChirpRabbitMqConnection(IConnectionFactory connectionFacto
                 },
                 (ex, delay, attempt, ctx) =>
                 {
-                    Debug.WriteLine($"RabbitMQ connect retry {attempt} in {delay.TotalMilliseconds:n0} ms: {ex.Exception?.Message}");
+                    Console.WriteLine($"RabbitMQ connect retry {attempt} in {delay.TotalMilliseconds:n0} ms: {ex.Exception?.Message}");
                     return Task.CompletedTask;
                 });
 
@@ -93,27 +93,27 @@ internal sealed class ChirpRabbitMqConnection(IConnectionFactory connectionFacto
                 _connection.ConnectionShutdown += OnConnectionShutdown;
             }
 
-            Debug.WriteLine("RabbitMQ connected.");
+            Console.WriteLine("RabbitMQ connected.");
             return true;
         }
         catch (TimeoutRejectedException)
         {
-            Debug.WriteLine("RabbitMQ connect attempt timed out.");
+            Console.WriteLine("RabbitMQ connect attempt timed out.");
             return false;
         }
         catch (BrokerUnreachableException ex)
         {
-            Debug.WriteLine($"RabbitMQ unreachable: {ex.Message}");
+            Console.WriteLine($"RabbitMQ unreachable: {ex.Message}");
             return false;
         }
         catch (SocketException ex)
         {
-            Debug.WriteLine($"Socket error reaching RabbitMQ: {ex.Message}");
+            Console.WriteLine($"Socket error reaching RabbitMQ: {ex.Message}");
             return false;
         }
         catch (Exception ex)
         {
-            Debug.WriteLine($"RabbitMQ connect failed: {ex.Message}");
+            Console.WriteLine($"RabbitMQ connect failed: {ex.Message}");
             return false;
         }
         finally
@@ -128,21 +128,21 @@ internal sealed class ChirpRabbitMqConnection(IConnectionFactory connectionFacto
     private void OnConnectionShutdown(object? s, ShutdownEventArgs e)
     {
         if (_disposed) return;
-        Debug.WriteLine($"RabbitMQ shutdown: {e.ReplyText}");
+        Console.WriteLine($"RabbitMQ shutdown: {e.ReplyText}");
         _ = TryConnect(); // fire-and-forget; guarded by _isReconnecting
     }
 
     private void OnConnectionBlocked(object? s, ConnectionBlockedEventArgs e)
     {
         if (_disposed) return;
-        Debug.WriteLine($"RabbitMQ blocked: {e.Reason}");
+        Console.WriteLine($"RabbitMQ blocked: {e.Reason}");
         _ = TryConnect();
     }
 
     private void OnCallbackException(object? s, CallbackExceptionEventArgs e)
     {
         if (_disposed) return;
-        Debug.WriteLine($"RabbitMQ callback exception: {e.Exception.Message}");
+        Console.WriteLine($"RabbitMQ callback exception: {e.Exception.Message}");
         _ = TryConnect();
     }
 
