@@ -5,7 +5,9 @@
 [![NuGet](https://img.shields.io/nuget/v/Chirp.svg)](https://www.nuget.org/packages/Chirp/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-Chirp is a flexible, provider-agnostic messaging library that simplifies publishing and consuming messages across various message brokers, </br>including `RabbitMQ`, `Kafka`, `Redis`, `Azure Service Bu`s, `Amazon SQS`, `NATS`, and `Google PubSub`.
+Chirp is a flexible, provider-agnostic messaging library that simplifies publishing and consuming messages across
+various message brokers, </br>including `RabbitMQ`, `Kafka`, `Redis`, `Azure Service Bu`s, `Amazon SQS`, `NATS`, and
+`Google PubSub`.
 
 ## Features
 
@@ -14,24 +16,27 @@ Chirp is a flexible, provider-agnostic messaging library that simplifies publish
 - **Simple integration** with dependency injection
 - **Automatic handler registration and subscription**
 - **Support for multiple message brokers**:
-  - RabbitMQ (fully implemented)
-  - Kafka (planned)
-  - Redis (planned)
-  - Azure Service Bus (planned)
-  - Amazon SQS (planned)
-  - NATS (planned)
-  - Google PubSub (planned)
+    - RabbitMQ (fully implemented)
+    - Kafka (planned)
+    - Redis (planned)
+    - Azure Service Bus (planned)
+    - Amazon SQS (planned)
+    - NATS (planned)
+    - Google PubSub (planned)
 - **Message retries** with configurable retry counts
 - **Dead letter exchange/queue** support for failed messages
 - **Clean subscription management** with in-memory event tracking
 
 ## Installation
+
 `dotnet add package Chirp`
+
 ## Getting Started
 
 ### Configuration
 
 Add the necessary configuration to your `appsettings.json`:
+
 ```json
 {
   "RMQ": {
@@ -44,9 +49,11 @@ Add the necessary configuration to your `appsettings.json`:
   }
 }
 ```
+
 ### Setting Up Dependencies
 
 Register the required dependencies in your `Program.cs` or `Startup.cs`:
+
 ```csharp
 using Chirp.Infrastructure;
 using Chirp.Infrastructure.EventBus;
@@ -65,11 +72,14 @@ services.AddChirp(options =>
     options.AddConsumer<PaymentReceivedEventHandler>();
 });
 ```
+
 ### Using Strongly Typed Options
 
-Chirp supports strongly typed configuration options for each message broker implementation. </br>This provides better IntelliSense and type safety:
+Chirp supports strongly typed configuration options for each message broker implementation. </br>This provides better
+IntelliSense and type safety:
 
 #### RabbitMQ Configuration
+
 ```csharp
 using Chirp.Application.Common.EventBusOptions;
 using Chirp.Infrastructure;
@@ -92,7 +102,9 @@ services.AddChirp(options =>
     options.AddConsumer<PaymentReceivedEventHandler>();
 });
 ```
+
 #### Kafka Configuration (When Implemented)
+
 ```csharp
 using Chirp.Application.Common.EventBusOptions;
 using Chirp.Infrastructure;
@@ -110,7 +122,9 @@ services.AddChirp(options =>
     options.AddConsumer<OrderCreatedEventHandler>();
 });
 ```
+
 #### Azure Service Bus Configuration (When Implemented)
+
 ```csharp
 using Chirp.Application.Common.EventBusOptions;
 using Chirp.Infrastructure;
@@ -127,9 +141,11 @@ services.AddChirp(options =>
     options.AddConsumer<OrderCreatedEventHandler>();
 });
 ```
+
 ### Creating Events
 
 Create event classes that inherit from `IntegrationEvent`:
+
 ```csharp
 using Chirp.Domain.Common;
 
@@ -149,7 +165,9 @@ public class OrderCreatedEventHandler : IChirpIntegrationEventHandler<OrderCreat
     }
 }
 ```
+
 ### Publishing Events
+
 ```csharp
 public class OrderService
 {
@@ -168,11 +186,13 @@ public class OrderService
     }
 }
 ```
+
 ## Advanced Usage
 
 ### Using the Event Bus Factory
 
 You can also use the `EventBusFactory` to create an instance of the event bus:
+
 ```csharp
 IChirpEventBus eventBus = EventBusFactory.Create(
     EventBusType.RabbitMQ,
@@ -181,6 +201,7 @@ IChirpEventBus eventBus = EventBusFactory.Create(
     "my_service_queue",
     retryCount: 5);
 ```
+
 ### Working with Multiple Message Brokers
 
 Chirp is designed to support multiple message broker implementations. This can be useful in scenarios like:
@@ -190,10 +211,12 @@ Chirp is designed to support multiple message broker implementations. This can b
 - Publishing to multiple brokers for redundancy
 - Consuming messages from different sources
 
-Currently, the library has a fully implemented RabbitMQ provider, with other providers planned for future releases. 
-Once additional providers are implemented, you'll be able to use them by registering the appropriate connections and event buses.
+Currently, the library has a fully implemented RabbitMQ provider, with other providers planned for future releases.
+Once additional providers are implemented, you'll be able to use them by registering the appropriate connections and
+event buses.
 
 To manually register multiple event bus instances (once additional providers are implemented):
+
 ```csharp
 // Register the default event bus (RabbitMQ)
 services.AddChirp(options =>
@@ -224,6 +247,7 @@ services.AddSingleton<IChirpEventBus>(serviceProvider =>
 });
 */
 ```
+
 #### Planned Features for Multi-Broker Support
 
 - Message routing based on event type
@@ -233,16 +257,15 @@ services.AddSingleton<IChirpEventBus>(serviceProvider =>
 
 ## Supported Message Brokers
 
-| Provider                 | Status          | Configuration Section    |
-| :----------------------- | :-------------: | :----------------------- |
-| **RabbitMQ**             | ✅ Implemented  | `RMQ`                    |
-| **Kafka**                | Planned         | `Kafka`                  |
-| **Redis**                | Planned         | `Redis`                  |
-| **Azure Service Bus**    | Planned         | `AzureServiceBus`        |
-| **Amazon SQS**           | Planned         | `AWS:SQS`                |
-| **NATS**                 | Planned         | `NATS`                   |
-| **Google Pub/Sub**       | Planned         | `GooglePubSub`           |
-
+| Provider              |    Status     | Configuration Section |
+|:----------------------|:-------------:|:----------------------|
+| **RabbitMQ**          | ✅ Implemented | `RMQ`                 |
+| **Kafka**             |    Planned    | `Kafka`               |
+| **Redis**             |    Planned    | `Redis`               |
+| **Azure Service Bus** |    Planned    | `AzureServiceBus`     |
+| **Amazon SQS**        |    Planned    | `AWS:SQS`             |
+| **NATS**              |    Planned    | `NATS`                |
+| **Google Pub/Sub**    |    Planned    | `GooglePubSub`        |
 
 ## Contributing
 

@@ -2,9 +2,11 @@
 
 ## Setting up the Event Bus with Automatic Consumer Registration
 
-Chirp now supports automatic registration and subscription of event consumers using the `AddConsumer<T>` method. This eliminates the need to manually add each handler as a transient service or manually subscribe them.
+Chirp now supports automatic registration and subscription of event consumers using the `AddConsumer<T>` method. This
+eliminates the need to manually add each handler as a transient service or manually subscribe them.
 
 ### Register your event bus and handlers
+
 ```csharp
 // In your startup or program.cs
 services.AddChirp(options =>
@@ -19,11 +21,14 @@ services.AddChirp(options =>
     options.AddConsumer<ShipmentReadyEventHandler>();
 });
 ```
-That's it! No additional setup is required. The event handlers will be automatically subscribed to the event bus when it's first resolved from the service provider.
+
+That's it! No additional setup is required. The event handlers will be automatically subscribed to the event bus when
+it's first resolved from the service provider.
 
 ## Creating Event Handlers
 
 Event handlers should implement the `IIntegrationEventHandler<T>` interface:
+
 ```csharp
 public class OrderCreatedEventHandler : IIntegrationEventHandler<OrderCreatedEvent>
 {
@@ -41,16 +46,19 @@ public class OrderCreatedEventHandler : IIntegrationEventHandler<OrderCreatedEve
     }
 }
 ```
+
 ## Benefits of using AddConsumer<T>
 
 1. **Simplified Registration**: No need to manually register each handler as a transient service.
-2. **Automatic Interface Registration**: The system automatically registers the handler with the correct `IIntegrationEventHandler<T>` interface.
+2. **Automatic Interface Registration**: The system automatically registers the handler with the correct
+   `IIntegrationEventHandler<T>` interface.
 3. **Dependency Injection**: Handlers still get all dependencies injected automatically.
 4. **Automatic Subscription**: Handlers are automatically subscribed to the event bus - no manual subscription required.
 
 ## Example with Multiple Events per Handler
 
 A single handler can handle multiple event types by implementing multiple interfaces:
+
 ```csharp
 public class OrderProcessingHandler : 
     IIntegrationEventHandler<OrderCreatedEvent>,
@@ -75,13 +83,17 @@ public class OrderProcessingHandler :
     }
 }
 ```
+
 Register it once and it will be subscribed to all event types:
+
 ```csharp
 options.AddConsumer<OrderProcessingHandler>();
 ```
+
 ## Advanced Configuration
 
 For more advanced scenarios, you can still access the underlying event bus directly:
+
 ```csharp
 // Get the event bus
 var eventBus = serviceProvider.GetRequiredService<IEventBus>();
