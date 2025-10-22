@@ -10,9 +10,9 @@ using System.Net.Sockets;
 
 namespace Chirp.Infrastructure.EventBus.RabbitMQ;
 
-internal sealed class ChirpRabbitMqConnection : IChirpRabbitMqConnection, IDisposable
+internal sealed class ChirpRabbitMqConnection(IConnectionFactory connectionFactory) : IChirpRabbitMqConnection, IDisposable
 {
-    private readonly IConnectionFactory _connectionFactory;
+    private readonly IConnectionFactory _connectionFactory = connectionFactory;
     private readonly Lock _sync = new();
 
     private IConnection? _connection;
@@ -20,32 +20,30 @@ internal sealed class ChirpRabbitMqConnection : IChirpRabbitMqConnection, IDispo
     private int _isReconnecting; // 0 = no, 1 = yes
 
     // Short, bounded retry with jitter
-    private static readonly Random _rng = new();
+    private static readonly Random _rng = Random.Shared;
 
-    private static readonly AsyncRetryPolicy _retry =
-        Policy.Handle<Exception>()
+    private static readonly AsyncTimeoutPolicy<IConnection> _perAttemptTimeout = Policy.TimeoutAsync<IConnection>(TimeSpan.FromSeconds(5), TimeoutStrategy.Pessimistic);
+
+    private static readonly AsyncRetryPolicy<IConnection> _retry =
+        Policy<IConnection>
+            .Handle<Exception>()
             .WaitAndRetryAsync(
                 5,
                 attempt =>
                 {
-                    TimeSpan baseDelay =
-                        TimeSpan.FromMilliseconds(250 * Math.Pow(2, attempt - 1)); // 250ms, 500ms, 1s, 2s, 4s
-                    TimeSpan jitter = TimeSpan.FromMilliseconds(_rng.Next(0, 250));
+                    var baseDelay = TimeSpan.FromMilliseconds(250 * Math.Pow(2, attempt - 1)); // 250, 500, 1000, 2000, 4000
+                    var jitter = TimeSpan.FromMilliseconds(_rng.Next(0, 250));
                     return baseDelay + jitter;
                 },
                 (ex, delay, attempt, ctx) =>
                 {
-                    Debug.WriteLine(
-                        $"RabbitMQ connect retry {attempt} in {delay.TotalMilliseconds:n0} ms: {ex.Message}");
+                    Debug.WriteLine($"RabbitMQ connect retry {attempt} in {delay.TotalMilliseconds:n0} ms: {ex.Exception?.Message}");
                     return Task.CompletedTask;
                 });
 
     // Guard each connect attempt with a timeout so the app never sits forever
-    private static readonly AsyncTimeoutPolicy _timeout = Policy.TimeoutAsync(TimeSpan.FromSeconds(5)); // per attempt
-
-    private static readonly IAsyncPolicy _policy = Policy.WrapAsync(_retry, _timeout);
-
-    public ChirpRabbitMqConnection(IConnectionFactory connectionFactory) => _connectionFactory = connectionFactory;
+    private static readonly AsyncTimeoutPolicy<IConnection> _overallTimeout = Policy.TimeoutAsync<IConnection>(TimeSpan.FromSeconds(15), TimeoutStrategy.Pessimistic);
+    private static readonly Polly.Wrap.AsyncPolicyWrap<IConnection> _policy =Policy.WrapAsync(_overallTimeout, _retry, _perAttemptTimeout);
 
     public bool IsConnected => _connection is { IsOpen: true } && !_disposed;
 
@@ -77,13 +75,13 @@ internal sealed class ChirpRabbitMqConnection : IChirpRabbitMqConnection, IDispo
 
         try
         {
-            // Run the connect attempt with timeout + retries OFF the lock
             IConnection connection = _policy.ExecuteAsync(async () =>
             {
-                // Offload sync CreateConnection to a worker so timeout can cancel it
-                Task<IConnection> task = Task.Run(() => _connectionFactory.CreateConnection());
-                return await task; // timeout policy wraps this
-            }).GetAwaiter().GetResult();
+                // Offload the blocking connect so pessimistic timeout can cut it off
+                Task<IConnection> connectTask = Task.Run(() => _connectionFactory.CreateConnection());
+                return await connectTask.ConfigureAwait(false);
+            })
+                .GetAwaiter().GetResult();
 
             // Only lock to swap the connection and attach handlers
             using (_sync.EnterScope())
