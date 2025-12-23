@@ -740,6 +740,10 @@ public static class DependencyInjection
 
                     // Don't throw - continue with other handlers
                 }
+                finally
+                {
+                    Console.WriteLine($"--------------");
+                }
             }
         }
     }

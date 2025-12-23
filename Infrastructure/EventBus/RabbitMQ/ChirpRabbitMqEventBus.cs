@@ -123,6 +123,7 @@ public class ChirpRabbitMqEventBus : EventBusBase, IAsyncDisposable
             string eventName = typeof(T).Name;
 
             // Log subscription
+            Console.WriteLine($"--------------");
             Console.WriteLine($"Attempting to subscribe {typeof(TH).Name} to {eventName}");
 
             // Bind queue to exchange for this event type
