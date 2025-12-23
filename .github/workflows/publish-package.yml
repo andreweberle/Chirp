@@ -1,41 +1,37 @@
 name: publish package to NuGet
 
-on:
+on: 
   push:
-    branches: [ "main" ]
+    branches:  [ "main" ]
 
-jobs:
+jobs: 
   build:
     runs-on: ubuntu-latest
     env:
-      REPOSITORY_URL: 'https://api.nuget.org/v3/index.json'
-      OUTPUT_PROJECT: 'Chirp.csproj'
+      REPOSITORY_URL:  'https://api.nuget.org/v3/index. json'
+      OUTPUT_PROJECT:  'Chirp.csproj'
 
     steps:
     - uses: actions/checkout@v3
     
-    - name: Setup .NET
+    - name:  Setup .NET
       uses: actions/setup-dotnet@v2
       with:
         dotnet-version: 10.0.x
     
-    - name: Restore dependencies
+    - name:  Restore dependencies
       run: dotnet restore
     
-    - name: Build
-      run: dotnet build --no-restore
+    - name: Build project
+      run: dotnet build Chirp.csproj -c Release
     
-    - name: Debug Workflow
-      run: |
-        pwd
-        ls -R
     - name: Pack
-      run: dotnet pack ${{ env.OUTPUT_PROJECT }} -c Release
+      run: dotnet pack ${{ env.OUTPUT_PROJECT }} -c Release --no-build --output ./nupkgs
 
     - name: Debug Workflow
       run: |
         pwd
-        ls -R
+        ls -R ./nupkgs
     
     - name: Publish to NuGet 
-      run: dotnet nuget push ./bin/Release/*.nupkg --api-key ${{ secrets.NUGET_KEY }} --source ${{ env.REPOSITORY_URL }} --skip-duplicate
+      run: dotnet nuget push ./nupkgs/*.nupkg --api-key ${{ secrets.NUGET_KEY }} --source ${{ env. REPOSITORY_URL }} --skip-duplicate
