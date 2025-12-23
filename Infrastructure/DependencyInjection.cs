@@ -2,27 +2,31 @@
 using Chirp.Application.Interfaces;
 using Chirp.Domain.Common;
 using Chirp.Infrastructure.EventBus;
-using Chirp.Infrastructure.EventBus.AmazonSQS;
-using Chirp.Infrastructure.EventBus.AzureServiceBus;
-using Chirp.Infrastructure.EventBus.GooglePubSub;
-using Chirp.Infrastructure.EventBus.Kafka;
-using Chirp.Infrastructure.EventBus.NATS;
 using Chirp.Infrastructure.EventBus.RabbitMQ;
-using Chirp.Infrastructure.EventBus.Redis;
-using Microsoft.AspNetCore.Builder;
-using Microsoft.Extensions.Configuration;
-using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.DependencyInjection.Extensions;
-using Microsoft.Extensions.Hosting;
 using RabbitMQ.Client;
-using System;
-using System.Linq;
 using System.Reflection;
 
 namespace Chirp.Infrastructure;
 
 public static class DependencyInjection
 {
+    /// <summary>
+    /// Configures the Chirp event bus for the web application
+    /// </summary>
+    /// <param name="app">The web application</param>
+    /// <returns>The web application</returns>
+    public static WebApplication UseChirp(this WebApplication app)
+    {
+        // Get the event bus singleton from DI - this will trigger the initialization 
+        // that's already set up in AddChirp() through the factory method
+        IChirpEventBus eventBus = app.Services.GetRequiredService<IChirpEventBus>();
+
+        // No need to re-subscribe handlers as that's already done in AddChirp
+        // when the singleton is created
+
+        return app;
+    }
+
     /// <summary>
     /// Configures the Chirp event bus for the application
     /// </summary>

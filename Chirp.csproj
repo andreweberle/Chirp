@@ -1,4 +1,4 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+﻿<Project Sdk="Microsoft.NET.Sdk.Web">
 
     <PropertyGroup>
         <TargetFramework>net10.0</TargetFramework>
@@ -12,7 +12,7 @@
         </PackageDescription>
         <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
         <Deterministic>False</Deterministic>
-        <Version>3.0.2</Version>
+        <Version>3.0.3</Version>
 
         <PackageTags>messaging rabbitmq kafka redis azure-service-bus amazon-sqs nats google-pubsub event-bus</PackageTags>
         <PackageProjectUrl>https://github.com/andreweberle/Chirp</PackageProjectUrl>
