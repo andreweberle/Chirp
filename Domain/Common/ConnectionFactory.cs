@@ -10,7 +10,6 @@ public static class ConnectionFactory
             HostName = host,
             UserName = username,
             Password = password,
-            DispatchConsumersAsync = true,
             AutomaticRecoveryEnabled = true,
             TopologyRecoveryEnabled = true,
             NetworkRecoveryInterval = TimeSpan.FromSeconds(5),
