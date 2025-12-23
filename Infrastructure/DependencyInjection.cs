@@ -11,20 +11,6 @@ namespace Chirp.Infrastructure;
 public static class DependencyInjection
 {
     /// <summary>
-    /// Configures the Chirp event bus for the web application
-    /// </summary>
-    /// <param name="app">The web application</param>
-    /// <param name="cancellationToken">Cancellation token</param>
-    /// <returns>The web application</returns>
-    public static Task<WebApplication> UseChirpAsync(this WebApplication app, CancellationToken cancellationToken = default)
-    {
-        // Get the event bus singleton from DI
-        IChirpEventBus eventBus = app.Services.GetRequiredService<IChirpEventBus>();
-
-        return Task.FromResult(app);
-    }
-
-    /// <summary>
     /// Configures the Chirp event bus for the web application (synchronous version - not recommended)
     /// </summary>
     /// <param name="app">The web application</param>
@@ -90,7 +76,7 @@ public static class DependencyInjection
         Action<ChirpOptions> configureOptions,
         IConfiguration configuration)
     {
-        if (configuration == null) throw new ArgumentNullException(nameof(configuration));
+        ArgumentNullException.ThrowIfNull(configuration);
         ChirpOptions options = new();
         configureOptions(options);
 
@@ -118,7 +104,7 @@ public static class DependencyInjection
         Action<RabbitMqChirpOptions> configureOptions,
         IConfiguration configuration)
     {
-        if (configuration == null) throw new ArgumentNullException(nameof(configuration));
+        ArgumentNullException.ThrowIfNull(configuration);
 
         RabbitMqChirpOptions options = new();
         configureOptions(options);
@@ -147,7 +133,7 @@ public static class DependencyInjection
         Action<KafkaChirpOptions> configureOptions,
         IConfiguration configuration)
     {
-        if (configuration == null) throw new ArgumentNullException(nameof(configuration));
+        ArgumentNullException.ThrowIfNull(configuration);
 
         KafkaChirpOptions options = new();
         configureOptions(options);
@@ -176,7 +162,7 @@ public static class DependencyInjection
         Action<AzureServiceBusChirpOptions> configureOptions,
         IConfiguration configuration)
     {
-        if (configuration == null) throw new ArgumentNullException(nameof(configuration));
+        ArgumentNullException.ThrowIfNull(configuration);
 
         AzureServiceBusChirpOptions options = new();
         configureOptions(options);
@@ -205,7 +191,7 @@ public static class DependencyInjection
         Action<AmazonSqsChirpOptions> configureOptions,
         IConfiguration configuration)
     {
-        if (configuration == null) throw new ArgumentNullException(nameof(configuration));
+        ArgumentNullException.ThrowIfNull(configuration);
 
         AmazonSqsChirpOptions options = new();
         configureOptions(options);
@@ -234,7 +220,7 @@ public static class DependencyInjection
         Action<RedisChirpOptions> configureOptions,
         IConfiguration configuration)
     {
-        if (configuration == null) throw new ArgumentNullException(nameof(configuration));
+        ArgumentNullException.ThrowIfNull(configuration);
 
         RedisChirpOptions options = new();
         configureOptions(options);
@@ -263,7 +249,7 @@ public static class DependencyInjection
         Action<GooglePubSubChirpOptions> configureOptions,
         IConfiguration configuration)
     {
-        if (configuration == null) throw new ArgumentNullException(nameof(configuration));
+        ArgumentNullException.ThrowIfNull(configuration);
 
         GooglePubSubChirpOptions options = new();
         configureOptions(options);
@@ -292,7 +278,7 @@ public static class DependencyInjection
         Action<NatsChirpOptions> configureOptions,
         IConfiguration configuration)
     {
-        if (configuration == null) throw new ArgumentNullException(nameof(configuration));
+        ArgumentNullException.ThrowIfNull(configuration);
 
         NatsChirpOptions options = new();
         configureOptions(options);
@@ -506,20 +492,17 @@ public static class DependencyInjection
     /// </summary>
     /// <param name="options">The chirp options</param>
     /// <returns>The event bus type</returns>
-    private static EventBusType DetermineEventBusType(ChirpOptions options)
+    private static EventBusType DetermineEventBusType(ChirpOptions options) => options switch
     {
-        return options switch
-        {
-            RabbitMqChirpOptions => EventBusType.RabbitMQ,
-            KafkaChirpOptions => EventBusType.Kafka,
-            AzureServiceBusChirpOptions => EventBusType.AzureServiceBus,
-            AmazonSqsChirpOptions => EventBusType.AmazonSqs,
-            RedisChirpOptions => EventBusType.Redis,
-            GooglePubSubChirpOptions => EventBusType.GooglePubSub,
-            NatsChirpOptions => EventBusType.NATS,
-            _ => options.EventBusType
-        };
-    }
+        RabbitMqChirpOptions => EventBusType.RabbitMQ,
+        KafkaChirpOptions => EventBusType.Kafka,
+        AzureServiceBusChirpOptions => EventBusType.AzureServiceBus,
+        AmazonSqsChirpOptions => EventBusType.AmazonSqs,
+        RedisChirpOptions => EventBusType.Redis,
+        GooglePubSubChirpOptions => EventBusType.GooglePubSub,
+        NatsChirpOptions => EventBusType.NATS,
+        _ => options.EventBusType
+    };
 
     /// <summary>
     /// Adds event bus services to the service collection
