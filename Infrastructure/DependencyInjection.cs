@@ -684,8 +684,10 @@ public static class DependencyInjection
         if (options.Consumers.Count == 0) return;
 
         // Get the generic SubscribeAsync<T, TH>() method
-        MethodInfo? subscribeMethod = typeof(IChirpEventBus).GetMethod("SubscribeAsync");
-        if (subscribeMethod == null)
+        MethodInfo? subscribeAsyncMethod = typeof(IChirpEventBus).GetMethod("SubscribeAsync");
+
+        // Sanity check
+        if (subscribeAsyncMethod == null)
         {
             Console.WriteLine("Warning: Could not find SubscribeAsync method on IChirpEventBus");
             return;
@@ -702,7 +704,10 @@ public static class DependencyInjection
             Type handlerType = consumer.HandlerType;
 
             // Find all IIntegrationEventHandler<T> interfaces implemented by the handler
-            List<Type> eventHandlerInterfaces = [.. handlerType.GetInterfaces().Where(i => i.IsGenericType && i.GetGenericTypeDefinition() == typeof(IChirpIntegrationEventHandler<>))];
+            List<Type> eventHandlerInterfaces = 
+            [
+                .. handlerType.GetInterfaces().Where(i => i.IsGenericType && i.GetGenericTypeDefinition() == typeof(IChirpIntegrationEventHandler<>))
+            ];
 
             // Subscribe the handler for each event type it handles
             foreach (Type eventType in eventHandlerInterfaces.Select(handlerInterface => handlerInterface.GetGenericArguments()[0]))
@@ -715,21 +720,25 @@ public static class DependencyInjection
 
                 try
                 {
-                    // Create a strongly typed SubscribeAsync<T, TH> method with the correct generic parameters
-                    MethodInfo genericSubscribeMethod = subscribeMethod.MakeGenericMethod(eventType, handlerType);
+                    // Bind generic type arguments to SubscribeAsync<TEvent, THandler>
+                    MethodInfo closedSubscribeMethod =
+                        subscribeAsyncMethod.MakeGenericMethod(eventType, handlerType);
 
-                    // Invoke the SubscribeAsync method on the event bus
-                    object? result = genericSubscribeMethod.Invoke(eventBus, [CancellationToken.None]);
-                    
-                    // If it's a Task, we need to wait for it to ensure subscriptions happen sequentially
-                    if (result is Task task)
+                    // Invoke SubscribeAsync on the event bus
+                    object? returnValue =
+                        closedSubscribeMethod.Invoke(eventBus, [CancellationToken.None]);
+
+                    // Await the subscription to ensure sequential registration
+                    if (returnValue is Task subscriptionTask)
                     {
-                        task.GetAwaiter().GetResult();
-                        Console.WriteLine($"Successfully subscribed {handlerType.Name} to handle {eventType.Name} events");
+                        subscriptionTask.GetAwaiter().GetResult();
+                        Console.WriteLine(
+                            $"Successfully subscribed {handlerType.Name} to handle {eventType.Name} events");
                     }
                     else
                     {
-                        Console.WriteLine($"Warning: SubscribeAsync did not return a Task for {handlerType.Name} handling {eventType.Name}");
+                        Console.WriteLine(
+                            $"Warning: SubscribeAsync did not return a Task for {handlerType.Name} handling {eventType.Name}");
                     }
                 }
                 catch (Exception ex)
