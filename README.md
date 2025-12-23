@@ -6,8 +6,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 Chirp is a flexible, provider-agnostic messaging library that simplifies publishing and consuming messages across
-various message brokers, </br>including `RabbitMQ`, `Kafka`, `Redis`, `Azure Service Bu`s, `Amazon SQS`, `NATS`, and
-`Google PubSub`.
+various message brokers, including `RabbitMQ`, with planned support for `Kafka`, `Redis`, `Azure Service Bus`, `Amazon SQS`, `NATS`, and `Google Pub/Sub`.
 
 ## Features
 
@@ -15,17 +14,18 @@ various message brokers, </br>including `RabbitMQ`, `Kafka`, `Redis`, `Azure Ser
 - **Unified interface** for multiple message brokers
 - **Simple integration** with dependency injection
 - **Automatic handler registration and subscription**
-- **Support for multiple message brokers**:
-    - RabbitMQ (fully implemented)
-    - Kafka (planned)
-    - Redis (planned)
-    - Azure Service Bus (planned)
-    - Amazon SQS (planned)
-    - NATS (planned)
-    - Google PubSub (planned)
+- **Strongly-typed configuration options** for each message broker
 - **Message retries** with configurable retry counts
 - **Dead letter exchange/queue** support for failed messages
 - **Clean subscription management** with in-memory event tracking
+- **Support for multiple message brokers**:
+    - RabbitMQ (✅ fully implemented)
+    - Kafka (🚧 scaffolding in place)
+    - Redis (🚧 scaffolding in place)
+    - Azure Service Bus (🚧 scaffolding in place)
+    - Amazon SQS (🚧 scaffolding in place)
+    - NATS (🚧 scaffolding in place)
+    - Google Pub/Sub (🚧 scaffolding in place)
 
 ## Installation
 
@@ -60,7 +60,7 @@ using Chirp.Infrastructure.EventBus;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 
-// Add Chirp services with generic options
+// Add Chirp services with RabbitMQ
 services.AddChirp(options =>
 {
     options.EventBusType = EventBusType.RabbitMQ;
@@ -75,7 +75,7 @@ services.AddChirp(options =>
 
 ### Using Strongly Typed Options
 
-Chirp supports strongly typed configuration options for each message broker implementation. </br>This provides better
+Chirp supports strongly typed configuration options for each message broker implementation. This provides better
 IntelliSense and type safety:
 
 #### RabbitMQ Configuration
@@ -103,13 +103,17 @@ services.AddChirp(options =>
 });
 ```
 
-#### Kafka Configuration (When Implemented)
+#### Future Provider Configuration Examples
+
+The following configuration examples show how other providers will be configured once implemented:
+
+**Kafka Configuration (Scaffolding in place)**
 
 ```csharp
 using Chirp.Application.Common.EventBusOptions;
 using Chirp.Infrastructure;
 
-// Add Chirp services with Kafka-specific options
+// Note: Kafka implementation is not yet complete
 services.AddChirp(options => 
 {
     options.TopicName = "my-topic";
@@ -123,13 +127,13 @@ services.AddChirp(options =>
 });
 ```
 
-#### Azure Service Bus Configuration (When Implemented)
+**Azure Service Bus Configuration (Scaffolding in place)**
 
 ```csharp
 using Chirp.Application.Common.EventBusOptions;
 using Chirp.Infrastructure;
 
-// Add Chirp services with Azure Service Bus-specific options
+// Note: Azure Service Bus implementation is not yet complete
 services.AddChirp(options => 
 {
     options.UseTopics = true;
@@ -150,9 +154,13 @@ Create event classes that inherit from `IntegrationEvent`:
 using Chirp.Domain.Common;
 
 public record OrderCreatedEvent(int OrderId, string CustomerName, decimal Total) : IntegrationEvent;
+```
+
 ### Creating Event Handlers
 
-Create handlers that implement `IIntegrationEventHandler<T>`:
+Create handlers that implement `IChirpIntegrationEventHandler<T>`:
+
+```csharp
 using Chirp.Application.Interfaces;
 
 public class OrderCreatedEventHandler : IChirpIntegrationEventHandler<OrderCreatedEvent>
@@ -178,11 +186,11 @@ public class OrderService
         _eventBus = eventBus;
     }
 
-    public void CreateOrder(int orderId, string customerName, decimal total)
+    public async Task CreateOrderAsync(int orderId, string customerName, decimal total)
     {
         // Create and publish the event
         var orderCreatedEvent = new OrderCreatedEvent(orderId, customerName, total);
-        _eventBus.Publish(orderCreatedEvent);
+        await _eventBus.PublishAsync(orderCreatedEvent);
     }
 }
 ```
@@ -204,49 +212,16 @@ IChirpEventBus eventBus = EventBusFactory.Create(
 
 ### Working with Multiple Message Brokers
 
-Chirp is designed to support multiple message broker implementations. This can be useful in scenarios like:
+Chirp is designed to support multiple message broker implementations. Once additional providers are fully implemented, 
+this will be useful in scenarios like:
 
 - Migrating from one messaging system to another
 - Creating hybrid systems with different messaging needs
 - Publishing to multiple brokers for redundancy
 - Consuming messages from different sources
 
-Currently, the library has a fully implemented RabbitMQ provider, with other providers planned for future releases.
-Once additional providers are implemented, you'll be able to use them by registering the appropriate connections and
-event buses.
-
-To manually register multiple event bus instances (once additional providers are implemented):
-
-```csharp
-// Register the default event bus (RabbitMQ)
-services.AddChirp(options =>
-{
-    options.EventBusType = EventBusType.RabbitMQ;
-    options.QueueName = "primary_queue";
-});
-
-// Example of how you might register additional event buses in the future
-// Note: This is for illustration purposes only and will work when other providers are implemented
-/*
-// Register Redis connection
-services.AddSingleton<IRedisConnection>(sp => 
-{
-    // Configure Redis connection
-    return new RedisConnection(configuration);
-});
-
-// Register another event bus
-services.AddSingleton<IChirpEventBus>(serviceProvider => 
-{
-    return EventBusFactory.Create(
-        EventBusType.Redis, 
-        serviceProvider,
-        configuration,
-        "redis-channel"
-    );
-});
-*/
-```
+Currently, the library has a fully implemented RabbitMQ provider. Other providers have scaffolding in place but require 
+implementation of the core publish/subscribe functionality.
 
 #### Planned Features for Multi-Broker Support
 
@@ -257,19 +232,23 @@ services.AddSingleton<IChirpEventBus>(serviceProvider =>
 
 ## Supported Message Brokers
 
-| Provider              |    Status     | Configuration Section |
-|:----------------------|:-------------:|:----------------------|
-| **RabbitMQ**          | ✅ Implemented | `RMQ`                 |
-| **Kafka**             |    Planned    | `Kafka`               |
-| **Redis**             |    Planned    | `Redis`               |
-| **Azure Service Bus** |    Planned    | `AzureServiceBus`     |
-| **Amazon SQS**        |    Planned    | `AWS:SQS`             |
-| **NATS**              |    Planned    | `NATS`                |
-| **Google Pub/Sub**    |    Planned    | `GooglePubSub`        |
+| Provider              |        Status        | Configuration Section |
+|:----------------------|:--------------------:|:----------------------|
+| **RabbitMQ**          |  ✅ Fully Implemented | `RMQ`                 |
+| **Kafka**             | 🚧 Scaffolding in Place | `Kafka`               |
+| **Redis**             | 🚧 Scaffolding in Place | `Redis`               |
+| **Azure Service Bus** | 🚧 Scaffolding in Place | `AzureServiceBus`     |
+| **Amazon SQS**        | 🚧 Scaffolding in Place | `AWS:SQS`             |
+| **NATS**              | 🚧 Scaffolding in Place | `NATS`                |
+| **Google Pub/Sub**    | 🚧 Scaffolding in Place | `GooglePubSub`        |
+
+**Note:** Providers marked with 🚧 have interfaces, option classes, and event bus classes in place, but the 
+`PublishAsync` and `SubscribeAsync` methods are not yet implemented and will throw `NotImplementedException`.
 
 ## Contributing
 
-Contributions are welcome! Feel free to submit a Pull Request.
+Contributions are welcome! Feel free to submit a Pull Request. If you'd like to help implement one of the message 
+broker providers, please check the existing scaffolding in the `Infrastructure/EventBus` directory.
 
 ## License
 
