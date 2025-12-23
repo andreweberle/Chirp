@@ -39,7 +39,9 @@ public class ChirpRabbitMqEventBus : EventBusBase, IAsyncDisposable
     private readonly int _retryMax;
     private IChannel? _consumerChannel;
     private bool _initialized = false;
+    private bool _consumerStarted = false;
     private readonly SemaphoreSlim _initializationSemaphore = new(1, 1);
+    private readonly SemaphoreSlim _consumerSemaphore = new(1, 1);
     private Exception? _initializationException;
 
     private string ExchangeName { get; }
@@ -191,27 +193,38 @@ public class ChirpRabbitMqEventBus : EventBusBase, IAsyncDisposable
     /// <typeparam name="TH">The event handler type</typeparam>
     public override async Task SubscribeAsync<T, TH>(CancellationToken cancellationToken = default)
     {
-        // Ensure infrastructure is initialized
-        await EnsureInitializedAsync(cancellationToken);
-
-        // Try Connect If Required.
-        if (!_rabbitMQConnection.IsConnected) await _rabbitMQConnection.TryConnectAsync(cancellationToken);
-
-        // Get T TypeName.
-        string eventName = typeof(T).Name;
-
-        // Create Channel And New Queue.
-        using (IChannel _channel = await _rabbitMQConnection.CreateChannelAsync(cancellationToken))
+        try
         {
-            // Bind The Queue To The Exchange.
-            await _channel.QueueBindAsync(_queueName, ExchangeName, eventName, cancellationToken: cancellationToken);
+            // Ensure infrastructure is initialized
+            await EnsureInitializedAsync(cancellationToken);
+
+            // Try Connect If Required.
+            if (!_rabbitMQConnection.IsConnected) await _rabbitMQConnection.TryConnectAsync(cancellationToken);
+
+            // Get T TypeName.
+            string eventName = typeof(T).Name;
+
+            // Create Channel And Bind Queue to Exchange.
+            using (IChannel bindChannel = await _rabbitMQConnection.CreateChannelAsync(cancellationToken))
+            {
+                // Bind The Queue To The Exchange.
+                await bindChannel.QueueBindAsync(_queueName, ExchangeName, eventName, cancellationToken: cancellationToken);
+                await bindChannel.CloseAsync(cancellationToken);
+            }
+
+            // Add New Subscription.
+            SubscriptionsManager.AddSubscription<T, TH>();
+
+            // Start consumer only once
+            await StartConsumeAsync(cancellationToken);
+
+            Console.WriteLine($"Successfully subscribed {typeof(TH).Name} to handle {eventName} events");
         }
-
-        // Add New Subscription.
-        SubscriptionsManager.AddSubscription<T, TH>();
-
-        // Assign Event Handler.
-        await StartConsumeAsync(cancellationToken);
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error subscribing {typeof(TH).Name} to handle {typeof(T).Name} events: {ex.Message}");
+            throw;
+        }
     }
 
     /// <summary>
@@ -219,22 +232,45 @@ public class ChirpRabbitMqEventBus : EventBusBase, IAsyncDisposable
     /// </summary>
     private async Task StartConsumeAsync(CancellationToken cancellationToken = default)
     {
-        if (_consumerChannel == null)
-        {
-            Console.WriteLine("Warning: Consumer channel is not initialized. Skipping StartConsume.");
-            return;
-        }
-
+        // Use semaphore to ensure consumer is started only once
+        await _consumerSemaphore.WaitAsync(cancellationToken);
         try
         {
-            AsyncEventingBasicConsumer consumer = new(_consumerChannel);
-            consumer.ReceivedAsync += Consumer_Received;
-            await _consumerChannel.BasicConsumeAsync(_queueName, false, consumer, cancellationToken: cancellationToken);
+            // If consumer is already started, skip
+            if (_consumerStarted)
+            {
+                return;
+            }
+
+            if (_consumerChannel == null)
+            {
+                Console.WriteLine("Warning: Consumer channel is not initialized. Skipping StartConsume.");
+                return;
+            }
+
+            try
+            {
+                AsyncEventingBasicConsumer consumer = new(_consumerChannel);
+                consumer.ReceivedAsync += Consumer_Received;
+                await _consumerChannel.BasicConsumeAsync(_queueName, false, consumer, cancellationToken: cancellationToken);
+                _consumerStarted = true;
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error starting consume: {ex.Message}");
+                
+                // Recreate consumer channel and retry
+                _consumerChannel = await CreateConsumerChannelAsync(cancellationToken);
+                
+                AsyncEventingBasicConsumer consumer = new(_consumerChannel);
+                consumer.ReceivedAsync += Consumer_Received;
+                await _consumerChannel.BasicConsumeAsync(_queueName, false, consumer, cancellationToken: cancellationToken);
+                _consumerStarted = true;
+            }
         }
-        catch (Exception ex)
+        finally
         {
-            Console.WriteLine($"Error starting consume: {ex.Message}");
-            _consumerChannel = await CreateConsumerChannelAsync(cancellationToken);
+            _consumerSemaphore.Release();
         }
     }
 
@@ -477,8 +513,10 @@ public class ChirpRabbitMqEventBus : EventBusBase, IAsyncDisposable
     {
         Console.WriteLine($"RabbitMQ channel exception: {ea.Exception.Message}");
 
-        // Invalidate current channel
+        // Invalidate current channel and consumer state
         var oldChannel = Interlocked.Exchange(ref _consumerChannel, null);
+        _consumerStarted = false;
+        
         if (oldChannel != null)
         {
             try { await oldChannel.DisposeAsync(); } catch { }
@@ -522,9 +560,11 @@ public class ChirpRabbitMqEventBus : EventBusBase, IAsyncDisposable
             finally
             {
                 _consumerChannel = null;
+                _consumerStarted = false;
             }
         }
 
         _initializationSemaphore.Dispose();
+        _consumerSemaphore.Dispose();
     }
 }

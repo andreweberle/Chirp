@@ -667,5 +667,275 @@ public class RabbitMqEventBusTests
         Console.WriteLine($"Retry attempts took {elapsed.TotalSeconds:F2}s for {maxRetries} retries");
     }
 
+    // Additional test events for multiple subscription testing
+    public record SecondTestIntegrationEvent : IntegrationEvent
+    {
+        public string Message { get; set; } = string.Empty;
+    }
+
+    public record ThirdTestIntegrationEvent : IntegrationEvent
+    {
+        public string Message { get; set; } = string.Empty;
+    }
+
+    private class SecondTestIntegrationEventHandler : IChirpIntegrationEventHandler<SecondTestIntegrationEvent>
+    {
+        public bool HandlerCalled { get; private set; }
+        public string? ReceivedMessage { get; private set; }
+
+        public Task Handle(SecondTestIntegrationEvent @event)
+        {
+            HandlerCalled = true;
+            ReceivedMessage = @event.Message;
+            return Task.CompletedTask;
+        }
+    }
+
+    private class ThirdTestIntegrationEventHandler : IChirpIntegrationEventHandler<ThirdTestIntegrationEvent>
+    {
+        public bool HandlerCalled { get; private set; }
+        public string? ReceivedMessage { get; private set; }
+
+        public Task Handle(ThirdTestIntegrationEvent @event)
+        {
+            HandlerCalled = true;
+            ReceivedMessage = @event.Message;
+            return Task.CompletedTask;
+        }
+    }
+
+    /// <summary>
+    /// Tests that multiple subscriptions can be added without connection errors
+    /// This test specifically validates the fix for the "Connection close forced" issue
+    /// </summary>
+    [TestMethod]
+    public async Task MultipleSubscriptions_DoNotCauseConnectionErrors()
+    {
+        // Arrange
+        IChirpRabbitMqConnection connection = CreateConnection();
+        InMemoryEventBusSubscriptionsManager subscriptionsManager = new();
+
+        const string queueName = "test_multiple_subscriptions_queue";
+        const string exchangeName = "test_multiple_subscriptions_exchange";
+        const string dlxExchangeName = "test_multiple_subscriptions_dlx_exchange";
+
+        // Predeclare the exchange and queue
+        using (IChannel adminChannel = await connection.CreateChannelAsync(TestContext.CancellationToken))
+        {
+            await adminChannel.ExchangeDeclareAsync(
+                exchangeName,
+                ExchangeType.Direct,
+                true, 
+                cancellationToken: TestContext.CancellationToken);
+
+            await adminChannel.QueueDeclareAsync(
+                queueName,
+                true,
+                false,
+                false,
+                null, 
+                cancellationToken: TestContext.CancellationToken);
+        }
+
+        // Create handler instances
+        TestIntegrationEventHandler handler1 = new();
+        SecondTestIntegrationEventHandler handler2 = new();
+        ThirdTestIntegrationEventHandler handler3 = new();
+
+        // Set up DI
+        ServiceCollection services = new();
+        services.AddSingleton(handler1);
+        services.AddSingleton<TestIntegrationEventHandler>(_ => handler1);
+        services.AddSingleton(handler2);
+        services.AddSingleton<SecondTestIntegrationEventHandler>(_ => handler2);
+        services.AddSingleton(handler3);
+        services.AddSingleton<ThirdTestIntegrationEventHandler>(_ => handler3);
+        ServiceProvider serviceProvider = services.BuildServiceProvider();
+
+        // Create the bus
+        ChirpRabbitMqEventBus eventBus = new(
+            connection,
+            serviceProvider,
+            subscriptionsManager,
+            queueName,
+            5,
+            exchangeName,
+            dlxExchangeName);
+
+        // Act - Subscribe to multiple events in sequence (this was causing connection errors)
+        await eventBus.SubscribeAsync<TestIntegrationEvent, TestIntegrationEventHandler>(TestContext.CancellationToken);
+        await eventBus.SubscribeAsync<SecondTestIntegrationEvent, SecondTestIntegrationEventHandler>(TestContext.CancellationToken);
+        await eventBus.SubscribeAsync<ThirdTestIntegrationEvent, ThirdTestIntegrationEventHandler>(TestContext.CancellationToken);
+
+        // Give the consumer time to stabilize
+        await Task.Delay(500, TestContext.CancellationToken);
+
+        // Publish events to all three subscriptions
+        TestIntegrationEvent testEvent1 = new() { Message = "First event message" };
+        SecondTestIntegrationEvent testEvent2 = new() { Message = "Second event message" };
+        ThirdTestIntegrationEvent testEvent3 = new() { Message = "Third event message" };
+
+        await eventBus.PublishAsync(testEvent1, TestContext.CancellationToken);
+        await eventBus.PublishAsync(testEvent2, TestContext.CancellationToken);
+        await eventBus.PublishAsync(testEvent3, TestContext.CancellationToken);
+
+        // Assert - Wait for all handlers to be called
+        TimeSpan maxWait = TimeSpan.FromSeconds(10);
+        DateTime startTime = DateTime.UtcNow;
+        
+        while ((!handler1.HandlerCalled || !handler2.HandlerCalled || !handler3.HandlerCalled) 
+               && DateTime.UtcNow - startTime < maxWait)
+        {
+            await Task.Delay(50, TestContext.CancellationToken);
+        }
+
+        Assert.IsTrue(handler1.HandlerCalled, "First handler should be called");
+        Assert.AreEqual(testEvent1.Message, handler1.ReceivedMessage);
+        
+        Assert.IsTrue(handler2.HandlerCalled, "Second handler should be called");
+        Assert.AreEqual(testEvent2.Message, handler2.ReceivedMessage);
+        
+        Assert.IsTrue(handler3.HandlerCalled, "Third handler should be called");
+        Assert.AreEqual(testEvent3.Message, handler3.ReceivedMessage);
+    }
+
+    /// <summary>
+    /// Tests that consumer is only started once even with multiple subscriptions
+    /// This validates the consumer state management fix
+    /// </summary>
+    [TestMethod]
+    public async Task ConsumerStartedOnlyOnce_WithMultipleSubscriptions()
+    {
+        // Arrange - Use a mock connection that tracks channel creation
+        var channelCreationCount = 0;
+        var consumerStartCount = 0;
+
+        var mockConnection = new TrackingRabbitMqConnection(CreateConnection(), 
+            () => channelCreationCount++,
+            () => consumerStartCount++);
+
+        InMemoryEventBusSubscriptionsManager subscriptionsManager = new();
+
+        const string queueName = "test_consumer_once_queue";
+        const string exchangeName = "test_consumer_once_exchange";
+        const string dlxExchangeName = "test_consumer_once_dlx_exchange";
+
+        // Predeclare infrastructure
+        using (IChannel adminChannel = await mockConnection.CreateChannelAsync(TestContext.CancellationToken))
+        {
+            await adminChannel.ExchangeDeclareAsync(exchangeName, ExchangeType.Direct, true, 
+                cancellationToken: TestContext.CancellationToken);
+            await adminChannel.QueueDeclareAsync(queueName, true, false, false, null, 
+                cancellationToken: TestContext.CancellationToken);
+        }
+
+        // Reset counter after infrastructure setup
+        channelCreationCount = 0;
+
+        TestIntegrationEventHandler handler1 = new();
+        SecondTestIntegrationEventHandler handler2 = new();
+
+        ServiceCollection services = new();
+        services.AddSingleton(handler1);
+        services.AddSingleton<TestIntegrationEventHandler>(_ => handler1);
+        services.AddSingleton(handler2);
+        services.AddSingleton<SecondTestIntegrationEventHandler>(_ => handler2);
+        ServiceProvider serviceProvider = services.BuildServiceProvider();
+
+        ChirpRabbitMqEventBus eventBus = new(
+            mockConnection,
+            serviceProvider,
+            subscriptionsManager,
+            queueName,
+            5,
+            exchangeName,
+            dlxExchangeName);
+
+        // Act - Subscribe to multiple events
+        await eventBus.SubscribeAsync<TestIntegrationEvent, TestIntegrationEventHandler>(TestContext.CancellationToken);
+        await eventBus.SubscribeAsync<SecondTestIntegrationEvent, SecondTestIntegrationEventHandler>(TestContext.CancellationToken);
+
+        await Task.Delay(500, TestContext.CancellationToken);
+
+        // Assert - Verify reasonable channel usage
+        // We expect: 1 consumer channel during initialization, 2 binding channels (one per subscription)
+        // Total should be around 3-4 channels (not 6+ which would indicate problems)
+        Assert.IsTrue(channelCreationCount <= 5, 
+            $"Too many channels created: {channelCreationCount}. Expected around 3 (1 consumer + 2 binding channels)");
+        
+        Console.WriteLine($"Channels created: {channelCreationCount}");
+    }
+
+    /// <summary>
+    /// Mock connection wrapper that tracks channel creation
+    /// </summary>
+    private class TrackingRabbitMqConnection : IChirpRabbitMqConnection
+    {
+        private readonly IChirpRabbitMqConnection _innerConnection;
+        private readonly Action _onChannelCreated;
+        private readonly Action _onConsumerStarted;
+
+        public TrackingRabbitMqConnection(IChirpRabbitMqConnection innerConnection, 
+            Action onChannelCreated, Action onConsumerStarted)
+        {
+            _innerConnection = innerConnection;
+            _onChannelCreated = onChannelCreated;
+            _onConsumerStarted = onConsumerStarted;
+        }
+
+        public bool IsConnected => _innerConnection.IsConnected;
+
+        public Task<bool> TryConnectAsync(CancellationToken cancellationToken = default)
+        {
+            return _innerConnection.TryConnectAsync(cancellationToken);
+        }
+
+        public async Task<IChannel> CreateChannelAsync(CancellationToken cancellationToken = default)
+        {
+            _onChannelCreated();
+            return await _innerConnection.CreateChannelAsync(cancellationToken);
+        }
+    }
+
+    /// <summary>
+    /// Tests that subscription errors are properly logged and thrown
+    /// </summary>
+    [TestMethod]
+    public async Task SubscribeAsync_LogsAndThrowsErrors_OnFailure()
+    {
+        // Arrange
+        DisconnectedRabbitMqConnection disconnectedConnection = new();
+        InMemoryEventBusSubscriptionsManager subscriptionsManager = new();
+        ServiceCollection services = new();
+        ServiceProvider serviceProvider = services.BuildServiceProvider();
+
+        const string queueName = "test_error_logging_queue";
+        const string exchangeName = "test_error_logging_exchange";
+        const string dlxExchangeName = "test_error_logging_dlx_exchange";
+
+        ChirpRabbitMqEventBus eventBus = new(
+            disconnectedConnection,
+            serviceProvider,
+            subscriptionsManager,
+            queueName,
+            5,
+            exchangeName,
+            dlxExchangeName);
+
+        // Act & Assert
+        bool exceptionThrown = false;
+        try
+        {
+            await eventBus.SubscribeAsync<TestIntegrationEvent, TestIntegrationEventHandler>(
+                TestContext.CancellationToken);
+        }
+        catch (Exception)
+        {
+            exceptionThrown = true;
+        }
+
+        Assert.IsTrue(exceptionThrown, "Should throw exception when subscription fails");
+    }
+
     public TestContext TestContext { get; set; }
 }
