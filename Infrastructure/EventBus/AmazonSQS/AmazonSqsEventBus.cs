@@ -53,7 +53,7 @@ public class AmazonSqsEventBus : EventBusBase
     /// Publishes an event to Amazon SQS
     /// </summary>
     /// <param name="event">The event to publish</param>
-    public override void Publish(IntegrationEvent @event)
+    public override Task PublishAsync(IntegrationEvent @event, CancellationToken cancellationToken = default)
     {
         throw new NotImplementedException();
     }
@@ -63,17 +63,7 @@ public class AmazonSqsEventBus : EventBusBase
     /// </summary>
     /// <typeparam name="T">The event type</typeparam>
     /// <typeparam name="TH">The event handler type</typeparam>
-    public override void Subscribe<T, TH>()
-    {
-        throw new NotImplementedException();
-    }
-
-    private async Task ProcessMessageAsync(string message, IDictionary<string, string> attributes)
-    {
-        throw new NotImplementedException();
-    }
-
-    private void StartMessageProcessing()
+    public override Task SubscribeAsync<T, TH>(CancellationToken cancellationToken = default)
     {
         throw new NotImplementedException();
     }

@@ -47,7 +47,7 @@ public class KafkaEventBus : EventBusBase
     /// Publishes an event to Kafka
     /// </summary>
     /// <param name="event">The event to publish</param>
-    public override void Publish(IntegrationEvent @event)
+    public override Task PublishAsync(IntegrationEvent @event, CancellationToken cancellationToken = default)
     {
         throw new NotImplementedException();
     }
@@ -57,7 +57,7 @@ public class KafkaEventBus : EventBusBase
     /// </summary>
     /// <typeparam name="T">The event type</typeparam>
     /// <typeparam name="TH">The event handler type</typeparam>
-    public override void Subscribe<T, TH>()
+    public override Task SubscribeAsync<T, TH>(CancellationToken cancellationToken = default)
     {
         throw new NotImplementedException();
     }

@@ -9,11 +9,24 @@ namespace Chirp.Infrastructure.EventBus.NATS;
 /// <summary>
 /// NATS implementation of the event bus.
 /// </summary>
-public class NATSEventBus : EventBusBase
+/// <remarks>
+/// Initializes a new instance of NATSEventBus
+/// </remarks>
+/// <param name="natsConnection">The NATS connection</param>
+/// <param name="serviceProvider">The service provider for resolving handlers</param>
+/// <param name="eventBusSubscriptionsManager">The subscription manager</param>
+/// <param name="subjectPrefix">The subject prefix</param>
+/// <param name="queueGroup">The queue group for load balancing (optional)</param>
+public class NATSEventBus(
+    INATSConnection natsConnection,
+    IServiceProvider serviceProvider,
+    IChirpEventBusSubscriptionsManager eventBusSubscriptionsManager,
+    string subjectPrefix,
+    string queueGroup = null) : EventBusBase(eventBusSubscriptionsManager, serviceProvider)
 {
-    private readonly INATSConnection _natsConnection;
-    private readonly string _subjectPrefix;
-    private readonly string _queueGroup;
+    private readonly INATSConnection _natsConnection = natsConnection ?? throw new ArgumentNullException(nameof(natsConnection));
+    private readonly string _subjectPrefix = subjectPrefix ?? throw new ArgumentNullException(nameof(subjectPrefix));
+    private readonly string _queueGroup = queueGroup;
     private readonly Dictionary<string, string> _subscriptions = new();
 
     // Serialize/deserialize options
@@ -24,31 +37,10 @@ public class NATSEventBus : EventBusBase
     };
 
     /// <summary>
-    /// Initializes a new instance of NATSEventBus
-    /// </summary>
-    /// <param name="natsConnection">The NATS connection</param>
-    /// <param name="serviceProvider">The service provider for resolving handlers</param>
-    /// <param name="eventBusSubscriptionsManager">The subscription manager</param>
-    /// <param name="subjectPrefix">The subject prefix</param>
-    /// <param name="queueGroup">The queue group for load balancing (optional)</param>
-    public NATSEventBus(
-        INATSConnection natsConnection,
-        IServiceProvider serviceProvider,
-        IChirpEventBusSubscriptionsManager eventBusSubscriptionsManager,
-        string subjectPrefix,
-        string queueGroup = null)
-        : base(eventBusSubscriptionsManager, serviceProvider)
-    {
-        _natsConnection = natsConnection ?? throw new ArgumentNullException(nameof(natsConnection));
-        _subjectPrefix = subjectPrefix ?? throw new ArgumentNullException(nameof(subjectPrefix));
-        _queueGroup = queueGroup;
-    }
-
-    /// <summary>
     /// Publishes an event to NATS
     /// </summary>
     /// <param name="event">The event to publish</param>
-    public override void Publish(IntegrationEvent @event)
+    public override Task PublishAsync(IntegrationEvent @event, CancellationToken cancellationToken = default)
     {
         throw new NotImplementedException();
     }
@@ -58,7 +50,7 @@ public class NATSEventBus : EventBusBase
     /// </summary>
     /// <typeparam name="T">The event type</typeparam>
     /// <typeparam name="TH">The event handler type</typeparam>
-    public override void Subscribe<T, TH>()
+    public override Task SubscribeAsync<T, TH>(CancellationToken cancellationToken = default)
     {
         throw new NotImplementedException();
     }

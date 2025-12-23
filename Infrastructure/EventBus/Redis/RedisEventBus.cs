@@ -11,10 +11,21 @@ namespace Chirp.Infrastructure.EventBus.Redis;
 /// <summary>
 /// Redis Pub/Sub implementation of the event bus.
 /// </summary>
-public class RedisEventBus : EventBusBase
+/// <remarks>
+/// Initializes a new instance of RedisEventBus
+/// </remarks>
+/// <param name="redisConnection">The Redis connection</param>
+/// <param name="serviceProvider">The service provider for resolving handlers</param>
+/// <param name="eventBusSubscriptionsManager">The subscription manager</param>
+/// <param name="channelPrefix">The channel prefix</param>
+public class RedisEventBus(
+    IRedisConnection redisConnection,
+    IServiceProvider serviceProvider,
+    IChirpEventBusSubscriptionsManager eventBusSubscriptionsManager,
+    string channelPrefix) : EventBusBase(eventBusSubscriptionsManager, serviceProvider)
 {
-    private readonly IRedisConnection _redisConnection;
-    private readonly string _channelPrefix;
+    private readonly IRedisConnection _redisConnection = redisConnection ?? throw new ArgumentNullException(nameof(redisConnection));
+    private readonly string _channelPrefix = channelPrefix ?? throw new ArgumentNullException(nameof(channelPrefix));
     private readonly Dictionary<string, bool> _subscriptions = new();
 
     // Serialize/deserialize options
@@ -25,28 +36,10 @@ public class RedisEventBus : EventBusBase
     };
 
     /// <summary>
-    /// Initializes a new instance of RedisEventBus
-    /// </summary>
-    /// <param name="redisConnection">The Redis connection</param>
-    /// <param name="serviceProvider">The service provider for resolving handlers</param>
-    /// <param name="eventBusSubscriptionsManager">The subscription manager</param>
-    /// <param name="channelPrefix">The channel prefix</param>
-    public RedisEventBus(
-        IRedisConnection redisConnection,
-        IServiceProvider serviceProvider,
-        IChirpEventBusSubscriptionsManager eventBusSubscriptionsManager,
-        string channelPrefix)
-        : base(eventBusSubscriptionsManager, serviceProvider)
-    {
-        _redisConnection = redisConnection ?? throw new ArgumentNullException(nameof(redisConnection));
-        _channelPrefix = channelPrefix ?? throw new ArgumentNullException(nameof(channelPrefix));
-    }
-
-    /// <summary>
     /// Publishes an event to Redis
     /// </summary>
     /// <param name="event">The event to publish</param>
-    public override void Publish(IntegrationEvent @event)
+    public override Task PublishAsync(IntegrationEvent @event, CancellationToken cancellationToken = default)
     {
         throw new NotImplementedException();
     }
@@ -56,7 +49,7 @@ public class RedisEventBus : EventBusBase
     /// </summary>
     /// <typeparam name="T">The event type</typeparam>
     /// <typeparam name="TH">The event handler type</typeparam>
-    public override void Subscribe<T, TH>()
+    public override Task SubscribeAsync<T, TH>(CancellationToken cancellationToken = default)
     {
         throw new NotImplementedException();
     }

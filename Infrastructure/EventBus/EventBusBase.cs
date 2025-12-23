@@ -21,14 +21,14 @@ public abstract class EventBusBase(
     /// Publishes an event to the event bus
     /// </summary>
     /// <param name="event">The event to publish</param>
-    public abstract void Publish(IntegrationEvent @event);
+    public abstract Task PublishAsync(IntegrationEvent @event, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Subscribes to an event with the specified handler
     /// </summary>
     /// <typeparam name="T">The event type</typeparam>
     /// <typeparam name="TH">The event handler type</typeparam>
-    public abstract void Subscribe<T, TH>()
+    public abstract Task SubscribeAsync<T, TH>(CancellationToken cancellationToken = default)
         where T : IntegrationEvent
         where TH : IChirpIntegrationEventHandler<T>;
 }

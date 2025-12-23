@@ -5,25 +5,25 @@ using Polly.Timeout;
 using RabbitMQ.Client;
 using RabbitMQ.Client.Events;
 using RabbitMQ.Client.Exceptions;
-using System.Diagnostics;
 using System.Net.Sockets;
 
 namespace Chirp.Infrastructure.EventBus.RabbitMQ;
 
-internal sealed class ChirpRabbitMqConnection(IConnectionFactory connectionFactory) : IChirpRabbitMqConnection, IDisposable
+internal sealed class ChirpRabbitMqConnection(IConnectionFactory connectionFactory) : IChirpRabbitMqConnection, IAsyncDisposable
 {
     private readonly IConnectionFactory _connectionFactory = connectionFactory;
-    private readonly Lock _sync = new();
+    private readonly SemaphoreSlim _semaphoreSlim = new(1, 1);
 
     private IConnection? _connection;
     private bool _disposed;
     private int _isReconnecting; // 0 = no, 1 = yes
 
+    private static readonly CreateChannelOptions _channelOptions = 
+        new(publisherConfirmationsEnabled: true, publisherConfirmationTrackingEnabled: true);
+
     // Short, bounded retry with jitter
     private static readonly Random _rng = Random.Shared;
-
     private static readonly AsyncTimeoutPolicy<IConnection> _perAttemptTimeout = Policy.TimeoutAsync<IConnection>(TimeSpan.FromSeconds(5), TimeoutStrategy.Pessimistic);
-
     private static readonly AsyncRetryPolicy<IConnection> _retry =
         Policy<IConnection>
             .Handle<Exception>()
@@ -46,55 +46,63 @@ internal sealed class ChirpRabbitMqConnection(IConnectionFactory connectionFacto
     private static readonly Polly.Wrap.AsyncPolicyWrap<IConnection> _policy =Policy.WrapAsync(_overallTimeout, _retry, _perAttemptTimeout);
 
     public bool IsConnected => _connection is { IsOpen: true } && !_disposed;
-
-    public IModel CreateModel()
+    public async Task<IChannel> CreateChannelAsync(CancellationToken cancellationToken = default)
     {
-        if (!IsConnected && !TryConnect())
+        bool tryConnectResult = await TryConnectAsync(cancellationToken);
+        
+        if (!IsConnected && !tryConnectResult)
         {
             throw new InvalidOperationException("RabbitMQ connection is not available.");
         }
 
-        return _connection!.CreateModel();
+
+        return await _connection!.CreateChannelAsync(_channelOptions, cancellationToken);
     }
 
-    /// <summary>
-    /// Try to connect, returning false quickly if not possible.
-    /// Never blocks the calling thread for long.
-    /// </summary>
-    public bool TryConnect()
+    public async Task<bool> TryConnectAsync(CancellationToken cancellationToken = default)
     {
         if (_disposed) return false;
 
-        using (_sync.EnterScope())
+        // Gate concurrent reconnect loops
+        await _semaphoreSlim.WaitAsync(cancellationToken);
+        try
         {
-            // Prevent concurrent reconnect loops
             if (_isReconnecting != 0) return IsConnected;
-
             _isReconnecting = 1;
+        }
+        finally
+        {
+            _semaphoreSlim.Release();
         }
 
         try
         {
-            IConnection connection = _policy.ExecuteAsync(async () =>
-            {
-                // Offload the blocking connect so pessimistic timeout can cut it off
-                Task<IConnection> connectTask = Task.Run(() => _connectionFactory.CreateConnection());
-                return await connectTask.ConfigureAwait(false);
-            })
-                .GetAwaiter().GetResult();
+            // Run connect under Polly (timeout/retry/etc.)
+            IConnection connection =
+                await _policy.ExecuteAsync(
+                        _ => _connectionFactory.CreateConnectionAsync(), // or (ct) => ... if supported
+                        cancellationToken
+                    )
+                    .ConfigureAwait(false);
 
-            // Only lock to swap the connection and attach handlers
-            using (_sync.EnterScope())
+            // Swap connection under lock
+            await _semaphoreSlim.WaitAsync(cancellationToken);
+            try
             {
                 _connection?.Dispose();
                 _connection = connection;
-                _connection.CallbackException += OnCallbackException;
-                _connection.ConnectionBlocked += OnConnectionBlocked;
-                _connection.ConnectionShutdown += OnConnectionShutdown;
-            }
 
-            Console.WriteLine("RabbitMQ connected.");
-            return true;
+                _connection.CallbackExceptionAsync += OnCallbackExceptionAsync;
+                _connection.ConnectionBlockedAsync += OnConnectionBlockedAsync;
+                _connection.ConnectionShutdownAsync += OnConnectionShutdownAsync;
+
+                Console.WriteLine("RabbitMQ connected.");
+                return true;
+            }
+            finally
+            {
+                _semaphoreSlim.Release();
+            }
         }
         catch (TimeoutRejectedException)
         {
@@ -118,49 +126,61 @@ internal sealed class ChirpRabbitMqConnection(IConnectionFactory connectionFacto
         }
         finally
         {
-            using (_sync.EnterScope())
+            // MUST reset even if caller cancels
+            await _semaphoreSlim.WaitAsync(); // no token
+            try
             {
                 _isReconnecting = 0;
+            }
+            finally
+            {
+                _semaphoreSlim.Release();
             }
         }
     }
 
-    private void OnConnectionShutdown(object? s, ShutdownEventArgs e)
+    private async Task OnConnectionShutdownAsync(object? s, ShutdownEventArgs e)
     {
         if (_disposed) return;
         Console.WriteLine($"RabbitMQ shutdown: {e.ReplyText}");
-        _ = TryConnect(); // fire-and-forget; guarded by _isReconnecting
+        await TryConnectAsync();
     }
 
-    private void OnConnectionBlocked(object? s, ConnectionBlockedEventArgs e)
+    private async Task OnConnectionBlockedAsync(object? s, ConnectionBlockedEventArgs e)
     {
         if (_disposed) return;
         Console.WriteLine($"RabbitMQ blocked: {e.Reason}");
-        _ = TryConnect();
+        await TryConnectAsync();
     }
 
-    private void OnCallbackException(object? s, CallbackExceptionEventArgs e)
+    private async Task OnCallbackExceptionAsync(object? s, CallbackExceptionEventArgs e)
     {
         if (_disposed) return;
         Console.WriteLine($"RabbitMQ callback exception: {e.Exception.Message}");
-        _ = TryConnect();
+        await TryConnectAsync();
     }
 
-    public void Dispose()
+    public async ValueTask DisposeAsync()
     {
         if (_disposed) return;
         _disposed = true;
 
-        using (_sync.EnterScope())
+        await _semaphoreSlim.WaitAsync();
+        try
         {
             if (_connection != null)
             {
-                _connection.CallbackException -= OnCallbackException;
-                _connection.ConnectionBlocked -= OnConnectionBlocked;
-                _connection.ConnectionShutdown -= OnConnectionShutdown;
+                _connection.CallbackExceptionAsync -= OnCallbackExceptionAsync;
+                _connection.ConnectionBlockedAsync -= OnConnectionBlockedAsync;
+                _connection.ConnectionShutdownAsync -= OnConnectionShutdownAsync;
                 _connection.Dispose();
                 _connection = null;
             }
+        }
+        finally
+        {
+            _semaphoreSlim.Release();
+            _semaphoreSlim.Dispose();
         }
     }
 }
