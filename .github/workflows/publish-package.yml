@@ -38,4 +38,4 @@ jobs:
         ls -R
     
     - name: Publish to NuGet 
-      run: dotnet nuget push /bin/Release/*.nupkg --api-key ${{ secrets.NUGET_KEY }} --source ${{ env.REPOSITORY_URL }} --skip-duplicate
+      run: dotnet nuget push ./bin/Release/*.nupkg --api-key ${{ secrets.NUGET_KEY }} --source ${{ env.REPOSITORY_URL }} --skip-duplicate
