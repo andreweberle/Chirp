@@ -7,13 +7,13 @@ public interface IChirpEventBus
     /// <summary>
     /// </summary>
     /// <param name="event"></param>
-    public void Publish(IntegrationEvent @event);
+    public Task PublishAsync(IntegrationEvent @event, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// </summary>
     /// <typeparam name="T"></typeparam>
     /// <typeparam name="TH"></typeparam>
-    public void Subscribe<T, TH>()
+    public Task SubscribeAsync<T, TH>(CancellationToken cancellationToken = default)
         where T : IntegrationEvent
         where TH : IChirpIntegrationEventHandler<T>;
 }
