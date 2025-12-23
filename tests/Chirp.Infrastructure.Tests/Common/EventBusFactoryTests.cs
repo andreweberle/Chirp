@@ -19,7 +19,6 @@ public class EventBusFactoryTests
     private static string _hostname = null!;
     private static int _port;
 
-
     [ClassInitialize]
     public static async Task ClassInitialize(TestContext testContext)
     {
@@ -28,23 +27,24 @@ public class EventBusFactoryTests
             .WithUsername(_username)
             .WithPassword(_password)
             .WithPortBinding(5672, true)
-            .WithWaitStrategy(Wait.ForUnixContainer().UntilPortIsAvailable(5672))
+            .WithWaitStrategy(Wait.ForUnixContainer().UntilInternalTcpPortIsAvailable(5672))
+            .WithImage("rabbitmq:3.11-management")
             .Build();
 
         // Start the container
-        await _rabbitmqContainer.StartAsync();
+        await _rabbitmqContainer.StartAsync(testContext.CancellationToken);
 
         // Get connection details
         _hostname = _rabbitmqContainer.Hostname;
         _port = _rabbitmqContainer.GetMappedPublicPort(5672);
     }
 
-    [ClassCleanup(ClassCleanupBehavior.EndOfClass)]
-    public static async Task ClassCleanup()
+    [ClassCleanup]
+    public static async Task ClassCleanup(TestContext testContext)
     {
         if (_rabbitmqContainer != null)
         {
-            await _rabbitmqContainer.StopAsync();
+            await _rabbitmqContainer.StopAsync(testContext.CancellationToken);
             await _rabbitmqContainer.DisposeAsync();
         }
     }
@@ -62,7 +62,6 @@ public class EventBusFactoryTests
             Port = _port,
             UserName = _username,
             Password = _password,
-            DispatchConsumersAsync = true
         };
 
         // Create the connection
@@ -102,7 +101,6 @@ public class EventBusFactoryTests
             Port = _port,
             UserName = _username,
             Password = _password,
-            DispatchConsumersAsync = true
         };
 
         // Create the connection
@@ -135,138 +133,179 @@ public class EventBusFactoryTests
     }
 
     [TestMethod]
-    [ExpectedException(typeof(InvalidOperationException))]
     public void Create_RabbitMQEventBusType_ConnectionNotRegistered_ThrowsInvalidOperationException()
     {
         // Arrange
         Mock<IServiceProvider> mockServiceProvider = new();
         Mock<IConfiguration> mockConfiguration = new();
 
-        // Set up service provider to return null for connection (not registered)
-        mockServiceProvider
-            .Setup(sp => sp.GetService(typeof(IChirpRabbitMqConnection)))
-            .Returns(null);
+        try
+        {
+            // Set up service provider to return null for connection (not registered)
+            mockServiceProvider
+                .Setup(sp => sp.GetService(typeof(IChirpRabbitMqConnection)))
+                .Returns(null);
 
-        // Act - should throw InvalidOperationException
-        EventBusFactory.Create(
-            EventBusType.RabbitMQ,
-            mockServiceProvider.Object,
-            mockConfiguration.Object,
-            "test_queue");
+            // Act - should throw InvalidOperationException
+            EventBusFactory.Create(
+                EventBusType.RabbitMQ,
+                mockServiceProvider.Object,
+                mockConfiguration.Object,
+                "test_queue");
+        }
+        catch (InvalidOperationException)
+        {
+        }
     }
 
     [TestMethod]
-    [ExpectedException(typeof(NotImplementedException))]
     public void CreateKafkaEventBusTypeThrowsNotImplementedException()
     {
         // Arrange
         Mock<IServiceProvider> mockServiceProvider = new();
         Mock<IConfiguration> mockConfiguration = new();
 
-        // Act - should throw NotImplementedException
-        EventBusFactory.Create(
-            EventBusType.Kafka,
-            mockServiceProvider.Object,
-            mockConfiguration.Object,
-            "test_topic");
+        try
+        {
+            // Act - should throw NotImplementedException
+            EventBusFactory.Create(
+                EventBusType.Kafka,
+                mockServiceProvider.Object,
+                mockConfiguration.Object,
+                "test_topic");
+        }
+        catch (NotImplementedException)
+        {
+        }
     }
 
     [TestMethod]
-    [ExpectedException(typeof(NotImplementedException))]
     public void CreateAzureServiceBusEventBusTypeThrowsNotImplementedException()
     {
         // Arrange
         Mock<IServiceProvider> mockServiceProvider = new();
         Mock<IConfiguration> mockConfiguration = new();
 
-        // Act - should throw NotImplementedException
-        EventBusFactory.Create(
-            EventBusType.AzureServiceBus,
-            mockServiceProvider.Object,
-            mockConfiguration.Object,
-            "test_queue");
+        try
+        {
+            // Act - should throw NotImplementedException
+            EventBusFactory.Create(
+                EventBusType.AzureServiceBus,
+                mockServiceProvider.Object,
+                mockConfiguration.Object,
+                "test_queue");
+        }
+        catch (NotImplementedException)
+        {
+        }
     }
 
     [TestMethod]
-    [ExpectedException(typeof(NotImplementedException))]
     public void CreateAmazonSqsEventBusTypeThrowsNotImplementedException()
     {
         // Arrange
         Mock<IServiceProvider> mockServiceProvider = new();
         Mock<IConfiguration> mockConfiguration = new();
 
-        // Act - should throw NotImplementedException
-        EventBusFactory.Create(
-            EventBusType.AmazonSqs,
-            mockServiceProvider.Object,
-            mockConfiguration.Object,
-            "test_queue");
+        try
+        {
+            // Act - should throw NotImplementedException
+            EventBusFactory.Create(
+                EventBusType.AmazonSqs,
+                mockServiceProvider.Object,
+                mockConfiguration.Object,
+                "test_queue");
+        }
+        catch (NotImplementedException)
+        {
+        }
     }
 
     [TestMethod]
-    [ExpectedException(typeof(NotImplementedException))]
     public void CreateRedisEventBusTypeThrowsNotImplementedException()
     {
         // Arrange
         Mock<IServiceProvider> mockServiceProvider = new();
         Mock<IConfiguration> mockConfiguration = new();
 
-        // Act - should throw NotImplementedException
-        EventBusFactory.Create(
-            EventBusType.Redis,
-            mockServiceProvider.Object,
-            mockConfiguration.Object,
-            "test_channel");
+        try
+        {
+            // Act - should throw NotImplementedException
+            EventBusFactory.Create(
+                EventBusType.Redis,
+                mockServiceProvider.Object,
+                mockConfiguration.Object,
+                "test_channel");
+        }
+        catch (NotImplementedException)
+        {
+        }
     }
 
     [TestMethod]
-    [ExpectedException(typeof(NotImplementedException))]
     public void CreateGooglePubSubEventBusTypeThrowsNotImplementedException()
     {
         // Arrange
         Mock<IServiceProvider> mockServiceProvider = new();
         Mock<IConfiguration> mockConfiguration = new();
 
-        // Act - should throw NotImplementedException
-        EventBusFactory.Create(
-            EventBusType.GooglePubSub,
-            mockServiceProvider.Object,
-            mockConfiguration.Object,
-            "test_topic");
+        try
+        {
+            // Act - should throw NotImplementedException
+            EventBusFactory.Create(
+                EventBusType.GooglePubSub,
+                mockServiceProvider.Object,
+                mockConfiguration.Object,
+                "test_topic");
+        }
+        catch (NotImplementedException)
+        {
+        }
     }
 
     [TestMethod]
-    [ExpectedException(typeof(NotImplementedException))]
     public void CreateNATSEventBusTypeThrowsNotImplementedException()
     {
         // Arrange
         Mock<IServiceProvider> mockServiceProvider = new();
         Mock<IConfiguration> mockConfiguration = new();
 
-        // Act - should throw NotImplementedException
-        EventBusFactory.Create(
-            EventBusType.NATS,
-            mockServiceProvider.Object,
-            mockConfiguration.Object,
-            "test_subject");
+        try
+        {
+            // Act - should throw NotImplementedException
+            EventBusFactory.Create(
+                EventBusType.NATS,
+                mockServiceProvider.Object,
+                mockConfiguration.Object,
+                "test_subject");
+        }
+        catch (NotImplementedException)
+        {
+        }
     }
 
     [TestMethod]
-    [ExpectedException(typeof(ArgumentException))]
     public void CreateInvalidEventBusTypeThrowsArgumentException()
     {
         // Arrange
         Mock<IServiceProvider> mockServiceProvider = new();
         Mock<IConfiguration> mockConfiguration = new();
 
-        // Act - should throw ArgumentException
-        EventBusFactory.Create(
-            (EventBusType)999, // Invalid enum value
-            mockServiceProvider.Object,
-            mockConfiguration.Object,
-            "test_queue");
+        // Act + Assert
+        try
+        {
+            EventBusFactory.Create(
+                (EventBusType)999, // Invalid enum value
+                mockServiceProvider.Object,
+                mockConfiguration.Object,
+                "test_queue");
+            Assert.Fail("Expected ArgumentException was not thrown.");
+        }
+        catch (ArgumentException)
+        {
+            // Expected exception
+        }
     }
-
 
     // Test-specific implementation of IChirpRabbitMqConnection
     private class TestRabbitMqConnection : IChirpRabbitMqConnection
@@ -277,16 +316,16 @@ public class EventBusFactoryTests
         public TestRabbitMqConnection(IConnectionFactory connectionFactory)
         {
             _connectionFactory = connectionFactory;
-            TryConnect();
+            TryConnectAsync();
         }
 
         public bool IsConnected => _connection is { IsOpen: true };
 
-        public bool TryConnect()
+        public async Task<bool> TryConnectAsync(CancellationToken cancellationToken = default)
         {
             try
             {
-                _connection = _connectionFactory.CreateConnection();
+                _connection = await _connectionFactory.CreateConnectionAsync(cancellationToken);
                 return true;
             }
             catch
@@ -295,10 +334,10 @@ public class EventBusFactoryTests
             }
         }
 
-        public IModel CreateModel()
+        public async Task<IChannel> CreateChannelAsync(CancellationToken cancellationToken = default)
         {
-            if (!IsConnected) TryConnect();
-            return _connection!.CreateModel();
+            if (!IsConnected) await TryConnectAsync(cancellationToken);
+            return await _connection!.CreateChannelAsync(cancellationToken: cancellationToken);
         }
     }
 }

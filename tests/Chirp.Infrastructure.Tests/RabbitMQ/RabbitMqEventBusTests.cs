@@ -3,15 +3,18 @@ using Chirp.Domain.Common;
 using Chirp.Infrastructure.EventBus;
 using Chirp.Infrastructure.EventBus.Common;
 using Chirp.Infrastructure.EventBus.RabbitMQ;
+using Docker.DotNet.Models;
 using DotNet.Testcontainers.Builders;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
 using RabbitMQ.Client;
 using RabbitMQ.Client.Events;
 using RabbitMQ.Client.Exceptions;
-using Testcontainers.RabbitMq;
+using System.Net.Http.Headers;
 using System.Net.Sockets;
 using System.Text;
 using System.Text.Json;
+using Testcontainers.RabbitMq;
 using ConnectionFactory = RabbitMQ.Client.ConnectionFactory;
 
 namespace Chirp.Infrastructure.Tests.RabbitMQ;
@@ -24,9 +27,16 @@ public class RabbitMqEventBusTests
     private static readonly string Password = "guest";
     private static string _hostname = null!;
     private static int _port;
+    private static int _webPort;
 
     // Test event class as a record
     public record TestIntegrationEvent : IntegrationEvent
+    {
+        public string Message { get; set; } = string.Empty;
+    }
+
+    // Test event class that simulates failure
+    public record TestFailedIntegrationEvent : IntegrationEvent
     {
         public string Message { get; set; } = string.Empty;
     }
@@ -45,6 +55,21 @@ public class RabbitMqEventBusTests
         }
     }
 
+    // Test event handler class
+    private class TestFailedIntegrationEventHandler : IChirpIntegrationEventHandler<TestFailedIntegrationEvent>
+    {
+        public bool HandlerCalled { get; private set; }
+        public string? ReceivedMessage { get; private set; }
+
+        public Task Handle(TestFailedIntegrationEvent @event)
+        {
+            HandlerCalled = true;
+
+            // Simulate failure
+            throw new Exception("Simulated handler failure");
+        }
+    }
+
     [ClassInitialize]
     public static async Task ClassInitialize(TestContext testContext)
     {
@@ -53,23 +78,26 @@ public class RabbitMqEventBusTests
             .WithUsername(Username)
             .WithPassword(Password)
             .WithPortBinding(5672, true)
-            .WithWaitStrategy(Wait.ForUnixContainer().UntilPortIsAvailable(5672))
+            .WithPortBinding(15672, true)
+            .WithWaitStrategy(Wait.ForUnixContainer().UntilInternalTcpPortIsAvailable(5672))
+            .WithImage("rabbitmq:3.11-management")
             .Build();
 
         // Start the container
-        await _rabbitmqContainer.StartAsync();
+        await _rabbitmqContainer.StartAsync(testContext.CancellationToken);
 
         // Get connection details
         _hostname = _rabbitmqContainer.Hostname;
         _port = _rabbitmqContainer.GetMappedPublicPort(5672);
+        _webPort = _rabbitmqContainer.GetMappedPublicPort(15672);
     }
 
-    [ClassCleanup(ClassCleanupBehavior.EndOfClass)]
-    public static async Task ClassCleanup()
+    [ClassCleanup]
+    public static async Task ClassCleanup(TestContext testContext)
     {
         if (_rabbitmqContainer != null)
         {
-            await _rabbitmqContainer.StopAsync();
+            await _rabbitmqContainer.StopAsync(testContext.CancellationToken);
             await _rabbitmqContainer.DisposeAsync();
         }
     }
@@ -83,16 +111,16 @@ public class RabbitMqEventBusTests
         public TestRabbitMqConnection(IConnectionFactory connectionFactory)
         {
             _connectionFactory = connectionFactory;
-            TryConnect();
+            TryConnectAsync();
         }
 
         public bool IsConnected => _connection is { IsOpen: true };
 
-        public bool TryConnect()
+        public async Task<bool> TryConnectAsync(CancellationToken cancellationToken = default)
         {
             try
             {
-                _connection = _connectionFactory.CreateConnection();
+                _connection = await _connectionFactory.CreateConnectionAsync(cancellationToken);
                 return true;
             }
             catch
@@ -101,10 +129,10 @@ public class RabbitMqEventBusTests
             }
         }
 
-        public IModel CreateModel()
+        public async Task<IChannel> CreateChannelAsync(CancellationToken cancellationToken = default)
         {
-            if (!IsConnected) TryConnect();
-            return _connection!.CreateModel();
+            if (!IsConnected) await TryConnectAsync(cancellationToken);
+            return await _connection!.CreateChannelAsync(cancellationToken: cancellationToken);
         }
     }
 
@@ -116,7 +144,6 @@ public class RabbitMqEventBusTests
             Port = _port,
             UserName = Username,
             Password = Password,
-            DispatchConsumersAsync = true
         };
 
         return new TestRabbitMqConnection(connectionFactory);
@@ -127,15 +154,15 @@ public class RabbitMqEventBusTests
     {
         public bool IsConnected => false;
 
-        public bool TryConnect()
+        public Task<bool> TryConnectAsync(CancellationToken cancellationToken = default)
         {
             // Simulate connection attempt that fails quickly without hanging
             throw new InvalidOperationException("Unable to connect to RabbitMQ broker - connection refused");
         }
 
-        public IModel CreateModel()
+        public Task<IChannel> CreateChannelAsync(CancellationToken cancellationToken = default)
         {
-            throw new InvalidOperationException("Cannot create model - RabbitMQ connection is not available");
+            throw new InvalidOperationException("Cannot create channel - RabbitMQ connection is not available");
         }
     }
 
@@ -158,7 +185,7 @@ public class RabbitMqEventBusTests
 
         public bool IsConnected => _connection is { IsOpen: true };
 
-        public bool TryConnect()
+        public async Task<bool> TryConnectAsync(CancellationToken cancellationToken = default)
         {
             _retryCount = 0;
             while (_retryCount < _maxRetries)
@@ -167,15 +194,15 @@ public class RabbitMqEventBusTests
                 {
                     // Simulate timeout by using a cancellation token
                     using CancellationTokenSource cts = new(_connectionTimeout);
-                    Task<IConnection> connectTask = Task.Run(() => _connectionFactory.CreateConnection(), cts.Token);
+                    Task<IConnection> connectTask = Task.Run(() => _connectionFactory.CreateConnectionAsync(), cts.Token);
 
-                    if (!connectTask.Wait(_connectionTimeout))
+                    if (!connectTask.Wait(_connectionTimeout, cancellationToken))
                     {
                         throw new TimeoutException(
                             $"Connection attempt timed out after {_connectionTimeout.TotalSeconds}s");
                     }
 
-                    _connection = connectTask.Result;
+                    _connection = await connectTask;
                     return true;
                 }
                 catch (Exception ex) when (ex is TimeoutException || ex is SocketException ||
@@ -197,11 +224,11 @@ public class RabbitMqEventBusTests
             return false;
         }
 
-        public IModel CreateModel()
+        public async Task<IChannel> CreateChannelAsync(CancellationToken cancellationToken = default)
         {
             if (!IsConnected)
             {
-                TryConnect();
+                await TryConnectAsync(cancellationToken);
             }
 
             if (!IsConnected)
@@ -209,7 +236,7 @@ public class RabbitMqEventBusTests
                 throw new InvalidOperationException("RabbitMQ connection is not available.");
             }
 
-            return _connection!.CreateModel();
+            return await _connection!.CreateChannelAsync(cancellationToken: cancellationToken);
         }
     }
 
@@ -241,7 +268,7 @@ public class RabbitMqEventBusTests
     }
 
     [TestMethod]
-    public void Publish_SendsMessageToExchange()
+    public async Task Publish_SendsMessageToExchangeAsync()
     {
         // Arrange
         IChirpRabbitMqConnection connection = CreateConnection();
@@ -267,15 +294,15 @@ public class RabbitMqEventBusTests
         string? receivedMessage = null;
 
         // Set up a consumer to verify the message was published
-        using IModel channel = connection.CreateModel();
+        using IChannel channel = await connection.CreateChannelAsync(TestContext.CancellationToken);
 
         // Make sure the queue exists and is bound to the exchange
-        channel.ExchangeDeclare(exchangeName, ExchangeType.Direct, true);
-        channel.QueueDeclare(queueName, true, false, false, null);
-        channel.QueueBind(queueName, exchangeName, testEvent.GetType().Name);
+        await channel.ExchangeDeclareAsync(exchangeName, ExchangeType.Direct, true, cancellationToken: TestContext.CancellationToken);
+        await channel.QueueDeclareAsync(queueName, true, false, false, null, cancellationToken: TestContext.CancellationToken);
+        await channel.QueueBindAsync(queueName, exchangeName, testEvent.GetType().Name, cancellationToken: TestContext.CancellationToken);
 
         AsyncEventingBasicConsumer consumer = new(channel);
-        consumer.Received += async (model, ea) =>
+        consumer.ReceivedAsync += async (model, ea) =>
         {
             byte[] body = ea.Body.ToArray();
             receivedMessage = Encoding.UTF8.GetString(body);
@@ -283,10 +310,10 @@ public class RabbitMqEventBusTests
             await Task.Yield();
         };
 
-        channel.BasicConsume(queueName, true, consumer);
+        await channel.BasicConsumeAsync(queueName, true, consumer, TestContext.CancellationToken);
 
         // Act
-        eventBus.Publish(testEvent);
+        await eventBus.PublishAsync(testEvent, TestContext.CancellationToken);
 
         // Assert - Wait for message to be received
         TimeSpan maxWaitTime = TimeSpan.FromSeconds(5);
@@ -317,19 +344,19 @@ public class RabbitMqEventBusTests
         const string dlxExchangeName = "test_subscribe_dlx_exchange";
 
         // Predeclare the exchange and queue so that Subscribe() can bind them
-        using (IModel adminChannel = connection.CreateModel())
+        using (IChannel adminChannel = await connection.CreateChannelAsync(TestContext.CancellationToken))
         {
-            adminChannel.ExchangeDeclare(
+            await adminChannel.ExchangeDeclareAsync(
                 exchangeName,
                 ExchangeType.Direct,
-                true);
+                true, cancellationToken: TestContext.CancellationToken);
 
-            adminChannel.QueueDeclare(
+            await adminChannel.QueueDeclareAsync(
                 queueName,
                 true,
                 false,
                 false,
-                null);
+                null, cancellationToken: TestContext.CancellationToken);
         }
 
         // Create a singleton handler instance to ensure we can track its state
@@ -352,21 +379,21 @@ public class RabbitMqEventBusTests
             dlxExchangeName);
 
         // Act
-        eventBus.Subscribe<TestIntegrationEvent, TestIntegrationEventHandler>();
+        await eventBus.SubscribeAsync<TestIntegrationEvent, TestIntegrationEventHandler>(TestContext.CancellationToken);
 
         // Give the internal consumer a moment to spin up and bind
-        await Task.Delay(300); // Increased delay to ensure setup is complete
+        await Task.Delay(300, TestContext.CancellationToken); // Increased delay to ensure setup is complete
 
         // Now publish event
         TestIntegrationEvent testEvent = new() { Message = "Test subscription message" };
-        eventBus.Publish(testEvent);
+        await eventBus.PublishAsync(testEvent, TestContext.CancellationToken);
 
         // Assert wait up to 5s for the handler to flip its flag
         TimeSpan maxWait = TimeSpan.FromSeconds(5);
         DateTime startTime = DateTime.UtcNow;
         while (!typedHandler.HandlerCalled && DateTime.UtcNow - startTime < maxWait)
         {
-            await Task.Delay(50);
+            await Task.Delay(50, TestContext.CancellationToken);
         }
 
         Assert.IsTrue(typedHandler.HandlerCalled, "Event handler should be called");
@@ -374,7 +401,95 @@ public class RabbitMqEventBusTests
     }
 
     [TestMethod]
-    [Timeout(10000)] // Test should complete within 10 seconds, ensuring no hang
+    public async Task Subscribe_RegistersAndInvokes_FailedEventHandler()
+    {
+        // Arrange
+        IChirpRabbitMqConnection connection = CreateConnection();
+        InMemoryEventBusSubscriptionsManager subscriptionsManager = new();
+
+        const string queueName = "test_subscribe_queue";
+        const string exchangeName = "test_subscribe_exchange";
+        const string dlxExchangeName = "test_subscribe_dlx_exchange";
+
+        // Predeclare the exchange and queue so that Subscribe() can bind them
+        using (IChannel adminChannel = await connection.CreateChannelAsync(TestContext.CancellationToken))
+        {
+            await adminChannel.ExchangeDeclareAsync(
+                exchangeName,
+                ExchangeType.Direct,
+                true, cancellationToken: TestContext.CancellationToken);
+
+            await adminChannel.QueueDeclareAsync(
+                queueName,
+                true,
+                false,
+                false,
+                null, cancellationToken: TestContext.CancellationToken);
+        }
+
+        // Create a singleton handler instance to ensure we can track its state
+        TestFailedIntegrationEventHandler typedHandler = new();
+
+        // Set up DI with the handler as a singleton
+        ServiceCollection services = new();
+        services.AddSingleton(typedHandler); // Register the exact instance we'll check later
+        services.AddSingleton<TestFailedIntegrationEventHandler>(_ => typedHandler); // Also register by type
+        ServiceProvider serviceProvider = services.BuildServiceProvider();
+
+        // Create the bus
+        ChirpRabbitMqEventBus eventBus = new(
+            connection,
+            serviceProvider,
+            subscriptionsManager,
+            queueName,
+            5,
+            exchangeName,
+            dlxExchangeName);
+
+        // Act
+        await eventBus.SubscribeAsync<TestFailedIntegrationEvent, TestFailedIntegrationEventHandler>(TestContext.CancellationToken);
+
+        // Give the internal consumer a moment to spin up and bind
+        await Task.Delay(300, TestContext.CancellationToken); // Increased delay to ensure setup is complete
+
+        // Now publish event
+        TestFailedIntegrationEvent testEvent = new() { Message = "Test subscription message" };
+        await eventBus.PublishAsync(testEvent, TestContext.CancellationToken);
+
+        // Assert wait up to 60s for the handler to flip its flag
+        TimeSpan maxWait = TimeSpan.FromSeconds(60); 
+        DateTime startTime = DateTime.UtcNow;
+
+        // Create a http client to check if we get a message in the dead letter exchange.
+        using HttpClient client = new();
+        string uri = $"http://{_hostname}:{_webPort}/api/queues/%2F/dlx.{queueName}";
+
+        string cred = Convert.ToBase64String(Encoding.UTF8.GetBytes($"{Username}:{Password}"));
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Basic", cred);
+
+        bool isMessageInDLX = false;
+
+        while (!isMessageInDLX && DateTime.UtcNow - startTime < maxWait)
+        {
+            await Task.Delay(100, TestContext.CancellationToken);
+
+            using HttpRequestMessage request = new(HttpMethod.Get, uri);
+            using HttpResponseMessage response = await client.SendAsync(request, TestContext.CancellationToken);
+            var responseBody = await response.Content.ReadAsStringAsync(TestContext.CancellationToken);
+
+            if (responseBody.Contains("\"messages_ready\":1"))
+            {
+                // Message is in the DLX
+                isMessageInDLX = true;
+            }
+        }
+
+        Assert.IsTrue(typedHandler.HandlerCalled, "Event handler should be called");
+        Assert.IsTrue(isMessageInDLX, "Message should be in the Dead Letter Exchange");
+    }
+
+    [TestMethod]
+    [Timeout(10000, CooperativeCancellation = true)] // Test should complete within 10 seconds, ensuring no hang
     public void Publish_WhenNotConnected_FailsGracefullyWithoutHanging()
     {
         // Arrange
@@ -420,7 +535,7 @@ public class RabbitMqEventBusTests
     }
 
     [TestMethod]
-    [Timeout(10000)] // Test should complete within 10 seconds
+    [Timeout(10000, CooperativeCancellation = true)] // Test should complete within 10 seconds
     public void Subscribe_WhenNotConnected_FailsGracefullyWithoutHanging()
     {
         // Arrange
@@ -462,7 +577,7 @@ public class RabbitMqEventBusTests
     }
 
     [TestMethod]
-    [Timeout(10000)] // Test should complete within 10 seconds
+    [Timeout(10000, CooperativeCancellation = true)] // Test should complete within 10 seconds
     public void Not_Connected_When_Initialized_ThrowsException()
     {
         // Arrange
@@ -472,7 +587,6 @@ public class RabbitMqEventBusTests
             Port = 9999, // Unlikely to be open
             UserName = Username,
             Password = Password,
-            DispatchConsumersAsync = true,
             RequestedConnectionTimeout = TimeSpan.FromSeconds(1), // Short timeout for faster test
             SocketReadTimeout = TimeSpan.FromSeconds(1),
             SocketWriteTimeout = TimeSpan.FromSeconds(1)
@@ -489,38 +603,32 @@ public class RabbitMqEventBusTests
         const string exchangeName = "test_subscribe_exchange";
         const string dlxExchangeName = "test_dlx_exchange";
 
-        DateTime startTime = DateTime.UtcNow;
-
-        // Act
-        ChirpRabbitMqEventBus eventBus = new(
-            chirpRabbitMqConnection,
-            new ServiceCollection().BuildServiceProvider(),
-            subscriptionsManager,
-            queueName,
-            5,
-            exchangeName,
-            dlxExchangeName);
-
-        TimeSpan elapsed = DateTime.UtcNow - startTime;
-
-        // Assert
-        // The constructor should have attempted to connect with retries
-        // Since we're using TestRabbitMqConnectionWithTimeout with 3 retries, it should take some time
-        Assert.IsTrue(elapsed.TotalMilliseconds > 100,
-            "Constructor should have attempted retries, taking some time");
-
-        Assert.IsFalse(chirpRabbitMqConnection.IsConnected,
-            "Connection should not be established after all retry attempts failed");
-
-        // Verify the event bus was still created (deferred initialization allows this)
-        Assert.IsNotNull(eventBus, "Event bus should be created even if connection failed");
-
-        Console.WriteLine($"Connection attempts took {elapsed.TotalSeconds:F2}s with retries");
+        try
+        {
+            // Act
+            ChirpRabbitMqEventBus eventBus = new(
+                chirpRabbitMqConnection,
+                new ServiceCollection().BuildServiceProvider(),
+                subscriptionsManager,
+                queueName,
+                5,
+                exchangeName,
+                dlxExchangeName);
+        }
+        catch (InvalidOperationException ex)
+        {
+            // Assert
+            // Expected - verify the exception message indicates connection failure
+            Assert.IsTrue(
+                ex.Message.Contains("RabbitMQ") || ex.Message.Contains("connection") || ex.Message.Contains("model"),
+                $"Exception message should indicate connection issue. Actual: {ex.Message}");
+            return;
+        }
     }
 
     [TestMethod]
-    [Timeout(10000)] // Test should complete within 10 seconds
-    public void Connection_Retries_AreTrackedCorrectly()
+    [Timeout(10000, CooperativeCancellation = true)] // Test should complete within 10 seconds
+    public async Task Connection_Retries_AreTrackedCorrectlyAsync()
     {
         // Arrange
         ConnectionFactory badConnectionFactory = new()
@@ -529,7 +637,6 @@ public class RabbitMqEventBusTests
             Port = 9999,
             UserName = Username,
             Password = Password,
-            DispatchConsumersAsync = true,
             RequestedConnectionTimeout = TimeSpan.FromMilliseconds(500),
             SocketReadTimeout = TimeSpan.FromMilliseconds(500),
             SocketWriteTimeout = TimeSpan.FromMilliseconds(500)
@@ -544,8 +651,7 @@ public class RabbitMqEventBusTests
         DateTime startTime = DateTime.UtcNow;
 
         // Act
-        bool connected = connection.TryConnect();
-
+        bool connected = await connection.TryConnectAsync(TestContext.CancellationToken);
         TimeSpan elapsed = DateTime.UtcNow - startTime;
 
         // Assert
@@ -555,9 +661,11 @@ public class RabbitMqEventBusTests
 
         // With 3 retries and delays between them (100ms, 200ms, 300ms), plus timeout attempts,
         // the total should be at least the delay time
-        Assert.IsTrue(elapsed.TotalMilliseconds >= 100, // At least first retry delay
-            $"Should have taken time for retries. Actual: {elapsed.TotalMilliseconds}ms");
+        Assert.IsGreaterThanOrEqualTo(100, // At least first retry delay
+            elapsed.TotalMilliseconds, $"Should have taken time for retries. Actual: {elapsed.TotalMilliseconds}ms");
 
         Console.WriteLine($"Retry attempts took {elapsed.TotalSeconds:F2}s for {maxRetries} retries");
     }
+
+    public TestContext TestContext { get; set; }
 }

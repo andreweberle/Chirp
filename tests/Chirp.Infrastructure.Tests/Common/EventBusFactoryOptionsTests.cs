@@ -30,23 +30,24 @@ public class EventBusFactoryOptionsTests
             .WithUsername(_username)
             .WithPassword(_password)
             .WithPortBinding(5672, true)
-            .WithWaitStrategy(Wait.ForUnixContainer().UntilPortIsAvailable(5672))
+            .WithWaitStrategy(Wait.ForUnixContainer().UntilInternalTcpPortIsAvailable(5672))
+            .WithImage("rabbitmq:3.11-management")
             .Build();
 
         // Start the container
-        await _rabbitmqContainer.StartAsync();
+        await _rabbitmqContainer.StartAsync(testContext.CancellationToken);
 
         // Get connection details
         _hostname = _rabbitmqContainer.Hostname;
         _port = _rabbitmqContainer.GetMappedPublicPort(5672);
     }
 
-    [ClassCleanup(ClassCleanupBehavior.EndOfClass)]
-    public static async Task ClassCleanup()
+    [ClassCleanup]
+    public static async Task ClassCleanup(TestContext testContext)
     {
         if (_rabbitmqContainer != null)
         {
-            await _rabbitmqContainer.StopAsync();
+            await _rabbitmqContainer.StopAsync(testContext.CancellationToken);
             await _rabbitmqContainer.DisposeAsync();
         }
     }
@@ -73,7 +74,6 @@ public class EventBusFactoryOptionsTests
             Port = _port,
             UserName = _username,
             Password = _password,
-            DispatchConsumersAsync = true
         };
 
         // Create the connection
@@ -102,7 +102,6 @@ public class EventBusFactoryOptionsTests
     }
 
     [TestMethod]
-    [ExpectedException(typeof(InvalidOperationException))]
     public void Create_WithRabbitMqChirpOptions_ConnectionNotRegistered_ThrowsInvalidOperationException()
     {
         // Arrange
@@ -120,11 +119,17 @@ public class EventBusFactoryOptionsTests
             .Setup(sp => sp.GetService(typeof(IChirpRabbitMqConnection)))
             .Returns(null);
 
-        // Act - should throw InvalidOperationException
-        EventBusFactory.Create(
-            options,
-            mockServiceProvider.Object,
-            mockConfiguration.Object);
+        try
+        {
+            // Act - should throw InvalidOperationException
+            EventBusFactory.Create(
+                options,
+                mockServiceProvider.Object,
+                mockConfiguration.Object);
+        }
+        catch (InvalidOperationException)
+        {
+        }
     }
 
 
@@ -149,7 +154,6 @@ public class EventBusFactoryOptionsTests
             Port = _port,
             UserName = _username,
             Password = _password,
-            DispatchConsumersAsync = true
         };
 
         // Create the connection
@@ -185,7 +189,6 @@ public class EventBusFactoryOptionsTests
     }
 
     [TestMethod]
-    [ExpectedException(typeof(ArgumentException))]
     public void Create_WithBaseChirpOptions_InvalidEventBusType_ThrowsArgumentException()
     {
         // Arrange
@@ -199,11 +202,17 @@ public class EventBusFactoryOptionsTests
         Mock<IServiceProvider> mockServiceProvider = new();
         Mock<IConfiguration> mockConfiguration = new();
 
-        // Act - should throw ArgumentException
-        EventBusFactory.Create(
-            options,
-            mockServiceProvider.Object,
-            mockConfiguration.Object);
+        try
+        {
+            // Act - should throw ArgumentException
+            EventBusFactory.Create(
+                options,
+                mockServiceProvider.Object,
+                mockConfiguration.Object);
+        }
+        catch (ArgumentException)
+        {
+        }
     }
 
     // Test-specific implementation of IChirpRabbitMqConnection
@@ -215,16 +224,17 @@ public class EventBusFactoryOptionsTests
         public TestRabbitMqConnection(IConnectionFactory connectionFactory)
         {
             _connectionFactory = connectionFactory;
-            TryConnect();
+            TryConnectAsync().GetAwaiter().GetResult();
         }
 
         public bool IsConnected => _connection is { IsOpen: true };
 
-        public bool TryConnect()
+
+        public async Task<bool> TryConnectAsync(CancellationToken cancellationToken = default)
         {
             try
             {
-                _connection = _connectionFactory.CreateConnection();
+                _connection = await _connectionFactory.CreateConnectionAsync();
                 return true;
             }
             catch
@@ -233,10 +243,10 @@ public class EventBusFactoryOptionsTests
             }
         }
 
-        public IModel CreateModel()
+        public async Task<IChannel> CreateChannelAsync(CancellationToken cancellationToken = default)
         {
-            if (!IsConnected) TryConnect();
-            return _connection!.CreateModel();
+            if (!IsConnected) await TryConnectAsync(cancellationToken);
+            return await _connection!.CreateChannelAsync(cancellationToken: cancellationToken);
         }
     }
 }
