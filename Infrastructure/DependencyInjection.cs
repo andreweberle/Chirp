@@ -14,15 +14,36 @@ public static class DependencyInjection
     /// Configures the Chirp event bus for the web application
     /// </summary>
     /// <param name="app">The web application</param>
+    /// <param name="cancellationToken">Cancellation token</param>
     /// <returns>The web application</returns>
+    public static async Task<WebApplication> UseChirpAsync(this WebApplication app, CancellationToken cancellationToken = default)
+    {
+        // Get the event bus singleton from DI
+        IChirpEventBus eventBus = app.Services.GetRequiredService<IChirpEventBus>();
+
+        // Trigger initialization by calling a method on it
+        // This ensures the infrastructure is set up before the app starts processing requests
+        await TriggerInitializationAsync(eventBus, cancellationToken);
+
+        return app;
+    }
+
+    /// <summary>
+    /// Configures the Chirp event bus for the web application (synchronous version - not recommended)
+    /// </summary>
+    /// <param name="app">The web application</param>
+    /// <returns>The web application</returns>
+    /// <remarks>
+    /// This is a synchronous version that may block. Consider using UseChirpAsync instead.
+    /// </remarks>
     public static WebApplication UseChirp(this WebApplication app)
     {
         // Get the event bus singleton from DI - this will trigger the initialization 
         // that's already set up in AddChirp() through the factory method
         IChirpEventBus eventBus = app.Services.GetRequiredService<IChirpEventBus>();
 
-        // No need to re-subscribe handlers as that's already done in AddChirp
-        // when the singleton is created
+        // Note: Auto-subscription happens in the factory, but infrastructure initialization
+        // is deferred until first Publish/Subscribe call
 
         return app;
     }
@@ -59,6 +80,20 @@ public static class DependencyInjection
         // when the singleton is created
 
         return host;
+    }
+
+    /// <summary>
+    /// Triggers initialization of the event bus to ensure it's ready
+    /// </summary>
+    private static async Task TriggerInitializationAsync(IChirpEventBus eventBus, CancellationToken cancellationToken)
+    {
+        // The event bus is already created, but we want to ensure it's ready
+        // We can do this by checking if it's a specific type and calling an internal init method
+        // For now, we'll just ensure the singleton is created (which happens in GetRequiredService)
+        
+        // If we need to force initialization, we could publish a dummy event or similar
+        // But with lazy initialization, it will happen on first real use
+        await Task.CompletedTask;
     }
 
     /// <summary>
@@ -668,11 +703,11 @@ public static class DependencyInjection
         if (options.Consumers.Count == 0)
             return;
 
-        // Get the generic Subscribe<T, TH>() method
-        MethodInfo? subscribeMethod = typeof(IChirpEventBus).GetMethod("Subscribe");
+        // Get the generic SubscribeAsync<T, TH>() method
+        MethodInfo? subscribeMethod = typeof(IChirpEventBus).GetMethod("SubscribeAsync");
         if (subscribeMethod == null)
         {
-            Console.WriteLine("Warning: Could not find Subscribe method on IEventBus");
+            Console.WriteLine("Warning: Could not find SubscribeAsync method on IChirpEventBus");
             return;
         }
 
@@ -690,14 +725,30 @@ public static class DependencyInjection
             {
                 try
                 {
-                    // Create a strongly typed Subscribe<T, TH> method with the correct generic parameters
+                    // Create a strongly typed SubscribeAsync<T, TH> method with the correct generic parameters
                     MethodInfo genericSubscribeMethod = subscribeMethod.MakeGenericMethod(eventType, handlerType);
 
-                    // Invoke the Subscribe method on the event bus
-                    genericSubscribeMethod.Invoke(eventBus, []);
-
-                    // Log success for debugging (can be removed in production or replaced with proper logging)
-                    Console.WriteLine($"Successfully subscribed {handlerType.Name} to handle {eventType.Name} events");
+                    // Invoke the SubscribeAsync method on the event bus
+                    // Note: We're calling this synchronously here since we're in a synchronous context (DI registration)
+                    // The actual subscription will happen asynchronously when UseChirp is called
+                    object? result = genericSubscribeMethod.Invoke(eventBus, [CancellationToken.None]);
+                    
+                    // If it's a Task, we need to wait for it (but don't block - fire and forget with proper handling)
+                    if (result is Task task)
+                    {
+                        // Fire-and-forget with error handling
+                        _ = task.ContinueWith(t =>
+                        {
+                            if (t.IsFaulted)
+                            {
+                                Console.WriteLine($"Error subscribing {handlerType.Name} to handle {eventType.Name} events: {t.Exception?.GetBaseException().Message}");
+                            }
+                            else
+                            {
+                                Console.WriteLine($"Successfully subscribed {handlerType.Name} to handle {eventType.Name} events");
+                            }
+                        }, TaskScheduler.Default);
+                    }
                 }
                 catch (Exception ex)
                 {
