@@ -38,8 +38,8 @@ public class ChirpRabbitMqEventBus : EventBusBase
     private readonly IChirpRabbitMqConnection _rabbitMQConnection;
     private readonly int _retryMax;
     private IChannel? _consumerChannel;
-    private readonly SemaphoreSlim _semaphoreSlim = new(1, 1);
     private bool _initialized = false;
+    private int _isInitializing = 0;
 
     private string ExchangeName { get; }
     private string DlxExchangeName { get; }
@@ -122,27 +122,27 @@ public class ChirpRabbitMqEventBus : EventBusBase
     private async Task EnsureInitializedAsync()
     {
         if (_initialized) return;
-        await _semaphoreSlim.WaitAsync();
 
-        try
+        // Use Interlocked to ensure only one thread initializes at a time
+        if (Interlocked.CompareExchange(ref _isInitializing, 1, 0) == 0)
         {
-            if (_initialized) return;
-
             try
             {
                 await InitializeInfrastructureAsync();
                 _initialized = true;
-                Console.WriteLine("Successfully initialized RabbitMQ infrastructure on retry.");
             }
-            catch (Exception ex)
+            finally
             {
-                throw new InvalidOperationException(
-                    "RabbitMQ connection is not available. Ensure RabbitMQ is running and accessible.", ex);
+                _isInitializing = 0;
             }
         }
-        finally
+        else
         {
-            _semaphoreSlim.Release();
+            // Another thread is initializing — wait a bit and check again
+            while (!_initialized)
+            {
+                await Task.Delay(100);
+            }
         }
     }
 
@@ -212,31 +212,22 @@ public class ChirpRabbitMqEventBus : EventBusBase
     /// </summary>
     private async Task StartConsumeAsync(CancellationToken cancellationToken = default)
     {
-        await _semaphoreSlim.WaitAsync(cancellationToken);
+        if (_consumerChannel == null)
+        {
+            Console.WriteLine("Warning: Consumer channel is not initialized. Skipping StartConsume.");
+            return;
+        }
 
         try
         {
-            if (_consumerChannel == null)
-            {
-                Console.WriteLine("Warning: Consumer channel is not initialized. Skipping StartConsume.");
-                return;
-            }
-
-            try
-            {
-                AsyncEventingBasicConsumer consumer = new(_consumerChannel);
-                consumer.ReceivedAsync += Consumer_Received;
-                await _consumerChannel.BasicConsumeAsync(_queueName, false, consumer, cancellationToken: cancellationToken);
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"Error starting consume: {ex.Message}");
-                _consumerChannel = await CreateConsumerChannelAsync(cancellationToken);
-            }
+            AsyncEventingBasicConsumer consumer = new(_consumerChannel);
+            consumer.ReceivedAsync += Consumer_Received;
+            await _consumerChannel.BasicConsumeAsync(_queueName, false, consumer, cancellationToken: cancellationToken);
         }
-        finally
+        catch (Exception ex)
         {
-            _semaphoreSlim.Release();
+            Console.WriteLine($"Error starting consume: {ex.Message}");
+            _consumerChannel = await CreateConsumerChannelAsync(cancellationToken);
         }
     }
 
@@ -454,74 +445,54 @@ public class ChirpRabbitMqEventBus : EventBusBase
     /// </summary>
     private async Task<IChannel> CreateConsumerChannelAsync(CancellationToken cancellationToken = default)
     {
-        // Ensure only one thread creates the channel at a time
-        await _semaphoreSlim.WaitAsync(cancellationToken);
-        
-        try
+        // Confirm Connection.
+        if (!_rabbitMQConnection.IsConnected)
         {
-            // Confirm Connection.
-            if (!_rabbitMQConnection.IsConnected)
+            await _rabbitMQConnection.TryConnectAsync(cancellationToken);
+        }
+
+        // Create Channel.
+        IChannel channel = await _rabbitMQConnection.CreateChannelAsync(cancellationToken);
+
+        // Declare Exchange.
+        await channel.ExchangeDeclareAsync(ExchangeName, ExchangeType.Direct, true, cancellationToken: cancellationToken);
+
+        // Declare Queue.
+        await channel.QueueDeclareAsync(_queueName, true, false, false, null, cancellationToken: cancellationToken);
+
+        // Improved exception handling for channel callbacks
+        channel.CallbackExceptionAsync += Channel_CallbackExceptionAsync;
+
+        return channel;
+    }
+
+    private async Task Channel_CallbackExceptionAsync(object sender, CallbackExceptionEventArgs ea)
+    {
+        Console.WriteLine($"RabbitMQ channel exception: {ea.Exception.Message}");
+
+        // Invalidate current channel
+        var oldChannel = Interlocked.Exchange(ref _consumerChannel, null);
+        if (oldChannel != null)
+        {
+            try { await oldChannel.DisposeAsync(); } catch { }
+        }
+
+        // Fire-and-forget recovery (avoids any deadlock risk)
+        _ = Task.Run(async () =>
+        {
+            try
             {
-                await _rabbitMQConnection.TryConnectAsync(cancellationToken);
+                await Task.Delay(1000); // backoff
+                if (!_rabbitMQConnection.IsConnected)
+                    await _rabbitMQConnection.TryConnectAsync();
+
+                await EnsureInitializedAsync();
+                await StartConsumeAsync();
             }
-
-            // Create Channel.
-            IChannel channel = await _rabbitMQConnection.CreateChannelAsync(cancellationToken);
-
-            // Declare Exchange.
-            await channel.ExchangeDeclareAsync(ExchangeName, ExchangeType.Direct, true, cancellationToken: cancellationToken);
-
-            // Declare Queue.
-            await channel.QueueDeclareAsync(_queueName, true, false, false, null, cancellationToken: cancellationToken);
-
-            // Improved exception handling for channel callbacks
-            channel.CallbackExceptionAsync += async (sender, ea) =>
+            catch (Exception ex)
             {
-                try
-                {
-                    // Log the exception
-                    Console.WriteLine($"RabbitMQ channel exception: {ea.Exception.Message}");                   
-                    await _consumerChannel.DisposeAsync();
-
-                    try
-                    {
-                        if (_consumerChannel?.IsOpen == true)
-                        {
-                            await _consumerChannel.CloseAsync();
-                        }
-                    }
-                    catch (Exception disposeEx)
-                    {
-                        Console.WriteLine($"Error disposing channel: {disposeEx.Message}");
-                    }
-
-                    // Wait a brief moment before reconnecting
-                    await Task.Delay(500);
-
-                    // Try to connect and check if successful
-                    if (!_rabbitMQConnection.IsConnected)
-                    {
-                        await _rabbitMQConnection.TryConnectAsync(cancellationToken);
-                    }
-
-                    // Only proceed if connection is established
-                    if (_rabbitMQConnection.IsConnected)
-                    {
-                        _consumerChannel = await CreateConsumerChannelAsync();
-                        await StartConsumeAsync();
-                    }
-                }
-                catch (Exception ex)
-                {
-                    Console.WriteLine($"Error recreating consumer channel: {ex.Message}");
-                }
-            };
-
-            return channel;
-        }
-        finally
-        {
-            _semaphoreSlim.Release();
-        }
+                Console.WriteLine($"Failed to recover from channel exception: {ex.Message}");
+            }
+        });
     }
 }
