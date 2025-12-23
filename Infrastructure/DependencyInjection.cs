@@ -679,11 +679,9 @@ public static class DependencyInjection
     /// <param name="eventBus">The event bus</param>
     /// <param name="options">The chirp options</param>
     /// <param name="serviceProvider">The service provider</param>
-    private static void AutoSubscribeEventHandlers(IChirpEventBus eventBus, ChirpOptions options,
-        IServiceProvider serviceProvider)
+    private static void AutoSubscribeEventHandlers(IChirpEventBus eventBus, ChirpOptions options, IServiceProvider serviceProvider)
     {
-        if (options.Consumers.Count == 0)
-            return;
+        if (options.Consumers.Count == 0) return;
 
         // Get the generic SubscribeAsync<T, TH>() method
         MethodInfo? subscribeMethod = typeof(IChirpEventBus).GetMethod("SubscribeAsync");
@@ -697,15 +695,17 @@ public static class DependencyInjection
         // in case the same handler implements multiple interfaces or is registered multiple times
         HashSet<(Type, Type)> processedSubscriptions = [];
 
+        // Iterate over all registered consumers
         foreach (ConsumerRegistration consumer in options.Consumers)
         {
+            // Get the handler type
             Type handlerType = consumer.HandlerType;
 
             // Find all IIntegrationEventHandler<T> interfaces implemented by the handler
             List<Type> eventHandlerInterfaces = [.. handlerType.GetInterfaces().Where(i => i.IsGenericType && i.GetGenericTypeDefinition() == typeof(IChirpIntegrationEventHandler<>))];
 
-            foreach (Type eventType in eventHandlerInterfaces.Select(handlerInterface =>
-                         handlerInterface.GetGenericArguments()[0]))
+            // Subscribe the handler for each event type it handles
+            foreach (Type eventType in eventHandlerInterfaces.Select(handlerInterface => handlerInterface.GetGenericArguments()[0]))
             {
                 // Skip if we've already processed this combination
                 if (!processedSubscriptions.Add((eventType, handlerType)))
@@ -719,25 +719,17 @@ public static class DependencyInjection
                     MethodInfo genericSubscribeMethod = subscribeMethod.MakeGenericMethod(eventType, handlerType);
 
                     // Invoke the SubscribeAsync method on the event bus
-                    // Note: We're calling this synchronously here since we're in a synchronous context (DI registration)
-                    // The actual subscription will happen asynchronously when UseChirp is called
                     object? result = genericSubscribeMethod.Invoke(eventBus, [CancellationToken.None]);
                     
-                    // If it's a Task, we need to wait for it (but don't block - fire and forget with proper handling)
+                    // If it's a Task, we need to wait for it to ensure subscriptions happen sequentially
                     if (result is Task task)
                     {
-                        // Fire-and-forget with error handling
-                        _ = task.ContinueWith(t =>
-                        {
-                            if (t.IsFaulted)
-                            {
-                                Console.WriteLine($"Error subscribing {handlerType.Name} to handle {eventType.Name} events: {t.Exception?.GetBaseException().Message}");
-                            }
-                            else
-                            {
-                                Console.WriteLine($"Successfully subscribed {handlerType.Name} to handle {eventType.Name} events");
-                            }
-                        }, TaskScheduler.Default);
+                        task.GetAwaiter().GetResult();
+                        Console.WriteLine($"Successfully subscribed {handlerType.Name} to handle {eventType.Name} events");
+                    }
+                    else
+                    {
+                        Console.WriteLine($"Warning: SubscribeAsync did not return a Task for {handlerType.Name} handling {eventType.Name}");
                     }
                 }
                 catch (Exception ex)

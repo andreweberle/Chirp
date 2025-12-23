@@ -860,8 +860,8 @@ public class RabbitMqEventBusTests
         // Assert - Verify reasonable channel usage
         // We expect: 1 consumer channel during initialization, 2 binding channels (one per subscription)
         // Total should be around 3-4 channels (not 6+ which would indicate problems)
-        Assert.IsTrue(channelCreationCount <= 5, 
-            $"Too many channels created: {channelCreationCount}. Expected around 3 (1 consumer + 2 binding channels)");
+        Assert.IsLessThanOrEqualTo(5,
+            channelCreationCount, $"Too many channels created: {channelCreationCount}. Expected around 3 (1 consumer + 2 binding channels)");
         
         Console.WriteLine($"Channels created: {channelCreationCount}");
     }
