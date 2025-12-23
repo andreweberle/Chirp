@@ -142,22 +142,49 @@ internal sealed class ChirpRabbitMqConnection(IConnectionFactory connectionFacto
     private async Task OnConnectionShutdownAsync(object? s, ShutdownEventArgs e)
     {
         if (_disposed) return;
-        Console.WriteLine($"RabbitMQ shutdown: {e.ReplyText}");
-        await TryConnectAsync();
+        
+        // Don't reconnect on normal/initiated shutdowns
+        if (e.Initiator == ShutdownInitiator.Application)
+        {
+            Console.WriteLine($"RabbitMQ shutdown (initiated by application): {e.ReplyText}");
+            return;
+        }
+        
+        Console.WriteLine($"RabbitMQ shutdown: {e.ReplyText} (Code: {e.ReplyCode}, Initiator: {e.Initiator})");
+        
+        // Only reconnect on unexpected shutdowns
+        if (e.ReplyCode != Constants.ReplySuccess)
+        {
+            // Fire-and-forget reconnect to avoid blocking
+            _ = Task.Run(async () =>
+            {
+                await Task.Delay(1000); // Brief delay before reconnect
+                await TryConnectAsync();
+            });
+        }
     }
 
     private async Task OnConnectionBlockedAsync(object? s, ConnectionBlockedEventArgs e)
     {
         if (_disposed) return;
         Console.WriteLine($"RabbitMQ blocked: {e.Reason}");
-        await TryConnectAsync();
+        
+        // Don't immediately try to reconnect when blocked
+        // The connection will auto-recover when unblocked
+        await Task.CompletedTask;
     }
 
     private async Task OnCallbackExceptionAsync(object? s, CallbackExceptionEventArgs e)
     {
         if (_disposed) return;
         Console.WriteLine($"RabbitMQ callback exception: {e.Exception.Message}");
-        await TryConnectAsync();
+        
+        // Fire-and-forget reconnect
+        _ = Task.Run(async () =>
+        {
+            await Task.Delay(1000); // Brief delay before reconnect
+            await TryConnectAsync();
+        });
     }
 
     public async ValueTask DisposeAsync()

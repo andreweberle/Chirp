@@ -12,7 +12,7 @@
         </PackageDescription>
         <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
         <Deterministic>False</Deterministic>
-        <Version>3.0.3</Version>
+        <Version>3.0.5</Version>
 
         <PackageTags>messaging rabbitmq kafka redis azure-service-bus amazon-sqs nats google-pubsub event-bus</PackageTags>
         <PackageProjectUrl>https://github.com/andreweberle/Chirp</PackageProjectUrl>
@@ -20,6 +20,7 @@
         <Title>Chirp - Messaging Library</Title>
         <Description>A flexible messaging library supporting multiple message brokers including RabbitMQ, Kafka, Redis, Azure Service Bus, Amazon SQS, NATS, and Google PubSub.</Description>
         <PackageReadmeFile>README.md</PackageReadmeFile>
+        <OutputType>Library</OutputType>
     </PropertyGroup>
     <ItemGroup>
         <None Include="README.md" Pack="true" PackagePath="\" />
