@@ -15,7 +15,7 @@ namespace Chirp.Infrastructure.EventBus.RabbitMQ;
 /// <summary>
 /// RabbitMQ implementation of the event bus
 /// </summary>
-public class ChirpRabbitMqEventBus : EventBusBase
+public class ChirpRabbitMqEventBus : EventBusBase, IAsyncDisposable
 {
     private const string BrokerName = "chirp_event_bus";
 
@@ -39,7 +39,8 @@ public class ChirpRabbitMqEventBus : EventBusBase
     private readonly int _retryMax;
     private IChannel? _consumerChannel;
     private bool _initialized = false;
-    private int _isInitializing = 0;
+    private readonly SemaphoreSlim _initializationSemaphore = new(1, 1);
+    private Exception? _initializationException;
 
     private string ExchangeName { get; }
     private string DlxExchangeName { get; }
@@ -76,23 +77,9 @@ public class ChirpRabbitMqEventBus : EventBusBase
         _dlxQueueName = $"dlx.{_queueName}";
         _retryMax = retryMax;
 
-        // Defer initialization to allow application to start even if RabbitMQ is unavailable
-        // This prevents UseChirp() from blocking application startup
-        try
-        {
-            // Fix: Remove 'await' and call synchronously, or move this logic to an async factory/init method.
-            InitializeInfrastructureAsync().GetAwaiter().GetResult();
-            _initialized = true;
-        }
-        catch (Exception ex)
-        {
-            // TODO: Create flag to control whether to throw or not
-            Console.WriteLine($"Warning: Failed to initialize RabbitMQ infrastructure during startup: {ex.Message}");
-            throw;
-            //Console.WriteLine("The event bus will attempt to reconnect on first use.");
-            // Don't throw - allow the application to start
-            // Initialization will be retried on first Publish/Subscribe call
-        }
+        // Defer initialization to first use (Publish/Subscribe) to avoid blocking application startup
+        // This prevents UseChirp() from blocking application startup with blocking async calls
+        Console.WriteLine("RabbitMQ event bus created. Infrastructure will be initialized on first use.");
     }
 
     /// <summary>
@@ -119,30 +106,50 @@ public class ChirpRabbitMqEventBus : EventBusBase
     /// <summary>
     /// Ensures infrastructure is initialized, attempting to initialize if not already done
     /// </summary>
-    private async Task EnsureInitializedAsync()
+    private async Task EnsureInitializedAsync(CancellationToken cancellationToken = default)
     {
+        // Fast path: already initialized successfully
         if (_initialized) return;
 
-        // Use Interlocked to ensure only one thread initializes at a time
-        if (Interlocked.CompareExchange(ref _isInitializing, 1, 0) == 0)
+        // If a previous initialization attempt failed, throw that exception
+        if (_initializationException != null)
         {
+            throw new InvalidOperationException(
+                "RabbitMQ infrastructure initialization failed previously. See inner exception for details.",
+                _initializationException);
+        }
+
+        // Use semaphore to ensure only one thread initializes
+        await _initializationSemaphore.WaitAsync(cancellationToken);
+        try
+        {
+            // Double-check after acquiring the semaphore
+            if (_initialized) return;
+
+            // Check again for previous failure after acquiring lock
+            if (_initializationException != null)
+            {
+                throw new InvalidOperationException(
+                    "RabbitMQ infrastructure initialization failed previously. See inner exception for details.",
+                    _initializationException);
+            }
+
             try
             {
-                await InitializeInfrastructureAsync();
+                await InitializeInfrastructureAsync(cancellationToken);
                 _initialized = true;
+                Console.WriteLine("RabbitMQ infrastructure initialized successfully.");
             }
-            finally
+            catch (Exception ex)
             {
-                _isInitializing = 0;
+                _initializationException = ex;
+                Console.WriteLine($"Failed to initialize RabbitMQ infrastructure: {ex.Message}");
+                throw;
             }
         }
-        else
+        finally
         {
-            // Another thread is initializing — wait a bit and check again
-            while (!_initialized)
-            {
-                await Task.Delay(100);
-            }
+            _initializationSemaphore.Release();
         }
     }
 
@@ -153,7 +160,7 @@ public class ChirpRabbitMqEventBus : EventBusBase
     public override async Task PublishAsync(IntegrationEvent @event, CancellationToken cancellationToken = default)
     {
         // Ensure infrastructure is initialized
-        await EnsureInitializedAsync();
+        await EnsureInitializedAsync(cancellationToken);
 
         // Confirm Connection.
         if (!_rabbitMQConnection.IsConnected) await _rabbitMQConnection.TryConnectAsync(cancellationToken);
@@ -185,7 +192,7 @@ public class ChirpRabbitMqEventBus : EventBusBase
     public override async Task SubscribeAsync<T, TH>(CancellationToken cancellationToken = default)
     {
         // Ensure infrastructure is initialized
-        await EnsureInitializedAsync();
+        await EnsureInitializedAsync(cancellationToken);
 
         // Try Connect If Required.
         if (!_rabbitMQConnection.IsConnected) await _rabbitMQConnection.TryConnectAsync(cancellationToken);
@@ -484,15 +491,40 @@ public class ChirpRabbitMqEventBus : EventBusBase
             {
                 await Task.Delay(1000); // backoff
                 if (!_rabbitMQConnection.IsConnected)
-                    await _rabbitMQConnection.TryConnectAsync();
+                    await _rabbitMQConnection.TryConnectAsync(CancellationToken.None);
 
-                await EnsureInitializedAsync();
-                await StartConsumeAsync();
+                await EnsureInitializedAsync(CancellationToken.None);
+                await StartConsumeAsync(CancellationToken.None);
             }
             catch (Exception ex)
             {
                 Console.WriteLine($"Failed to recover from channel exception: {ex.Message}");
             }
         });
+    }
+
+    /// <summary>
+    /// Disposes of resources used by the event bus
+    /// </summary>
+    public async ValueTask DisposeAsync()
+    {
+        if (_consumerChannel != null)
+        {
+            try
+            {
+                await _consumerChannel.CloseAsync();
+                await _consumerChannel.DisposeAsync();
+            }
+            catch
+            {
+                // Ignore disposal errors
+            }
+            finally
+            {
+                _consumerChannel = null;
+            }
+        }
+
+        _initializationSemaphore.Dispose();
     }
 }
