@@ -1,12 +1,9 @@
-using System.Collections.Immutable;
+using System.Reflection;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
-using System.Threading.Tasks;
 using Chirp.Application.Interfaces;
 using Chirp.Domain.Common;
-using Chirp.Infrastructure.EventBus;
-using Microsoft.Extensions.DependencyInjection;
 using RabbitMQ.Client;
 using RabbitMQ.Client.Events;
 
@@ -19,33 +16,28 @@ public class ChirpRabbitMqEventBus : EventBusBase, IAsyncDisposable
 {
     private const string BrokerName = "chirp_event_bus";
 
-    private static readonly JsonSerializerOptions s_caseInsensitiveOptions = new() { PropertyNameCaseInsensitive = true };
+    private readonly IChirpRabbitMqConnection _rabbitMQConnection;
+    private readonly string _queueName;
+    private readonly string _dlxQueueName;
+    private readonly int _retryMax;
+    
+    private IChannel? _consumerChannel;
+    
+    // Single lock for all infrastructure changes (initialization and consumer starting)
+    private readonly SemaphoreSlim _infrastructureLock = new(1, 1);
+    
+    private bool _isInfrastructureInitialized;
+    private bool _isConsumerStarted;
+    private string ExchangeName { get; }
+    private string DlxExchangeName { get; }
 
-    private static readonly JsonSerializerOptions _defaultJsonSerializerOptions = new()
+    private static readonly JsonSerializerOptions _jsonOptions = new()
     {
         IncludeFields = true,
         WriteIndented = true,
-        ReferenceHandler = ReferenceHandler.Preserve
+        ReferenceHandler = ReferenceHandler.Preserve,
+        PropertyNameCaseInsensitive = true
     };
-
-    private static BasicProperties CreateBasicProperties() => new()
-    {
-        DeliveryMode = DeliveryModes.Persistent
-    };
-
-    private readonly string _dlxQueueName;
-    private readonly string _queueName;
-    private readonly IChirpRabbitMqConnection _rabbitMQConnection;
-    private readonly int _retryMax;
-    private IChannel? _consumerChannel;
-    private bool _initialized = false;
-    private bool _consumerStarted = false;
-    private readonly SemaphoreSlim _initializationSemaphore = new(1, 1);
-    private readonly SemaphoreSlim _consumerSemaphore = new(1, 1);
-    private Exception? _initializationException;
-
-    private string ExchangeName { get; }
-    private string DlxExchangeName { get; }
 
     /// <summary>
     /// Initializes a new instance of RabbitMQEventBus
@@ -68,91 +60,13 @@ public class ChirpRabbitMqEventBus : EventBusBase, IAsyncDisposable
         string dlxExchangeName = "_dlxExchangeName")
         : base(eventBusSubscriptionsManager, serviceProvider)
     {
-        if (string.IsNullOrWhiteSpace(queueName))
-            throw new ArgumentNullException(nameof(queueName), "Queue name must be provided.");
-
         _rabbitMQConnection = rabbitMQConnection ?? throw new ArgumentNullException(nameof(rabbitMQConnection));
-        ExchangeName = exchangeName ?? throw new ArgumentNullException(nameof(exchangeName));
-        DlxExchangeName = dlxExchangeName ?? throw new ArgumentNullException(nameof(dlxExchangeName));
-
-        _queueName = queueName;
+        _queueName = queueName ?? throw new ArgumentNullException(nameof(queueName));
         _dlxQueueName = $"dlx.{_queueName}";
         _retryMax = retryMax;
-
-        // Defer initialization to first use (Publish/Subscribe) to avoid blocking application startup
-        // This prevents UseChirp() from blocking application startup with blocking async calls
+        ExchangeName = exchangeName;
+        DlxExchangeName = dlxExchangeName;
         Console.WriteLine("RabbitMQ event bus created. Infrastructure will be initialized on first use.");
-    }
-
-    /// <summary>
-    /// Initializes the RabbitMQ infrastructure (exchanges, queues, channels)
-    /// </summary>
-    private async Task InitializeInfrastructureAsync(CancellationToken cancellationToken = default)
-    {
-        // Create consumer channel
-        _consumerChannel = await CreateConsumerChannelAsync(cancellationToken);
-
-        // Create DLX infrastructure
-        using IChannel channel = await _rabbitMQConnection.CreateChannelAsync(cancellationToken);
-
-        // Create Exchange.
-        await channel.ExchangeDeclareAsync(DlxExchangeName, ExchangeType.Direct, true, cancellationToken: cancellationToken);
-
-        // Create the Queue
-        await channel.QueueDeclareAsync(_dlxQueueName, true, false, false, null, cancellationToken: cancellationToken);
-
-        // Bind DLXQ To DLX
-        await channel.QueueBindAsync(_dlxQueueName, DlxExchangeName, _dlxQueueName, cancellationToken: cancellationToken);
-    }
-
-    /// <summary>
-    /// Ensures infrastructure is initialized, attempting to initialize if not already done
-    /// </summary>
-    private async Task EnsureInitializedAsync(CancellationToken cancellationToken = default)
-    {
-        // Fast path: already initialized successfully
-        if (_initialized) return;
-
-        // If a previous initialization attempt failed, throw that exception
-        if (_initializationException != null)
-        {
-            throw new InvalidOperationException(
-                "RabbitMQ infrastructure initialization failed previously. See inner exception for details.",
-                _initializationException);
-        }
-
-        // Use semaphore to ensure only one thread initializes
-        await _initializationSemaphore.WaitAsync(cancellationToken);
-        try
-        {
-            // Double-check after acquiring the semaphore
-            if (_initialized) return;
-
-            // Check again for previous failure after acquiring lock
-            if (_initializationException != null)
-            {
-                throw new InvalidOperationException(
-                    "RabbitMQ infrastructure initialization failed previously. See inner exception for details.",
-                    _initializationException);
-            }
-
-            try
-            {
-                await InitializeInfrastructureAsync(cancellationToken);
-                _initialized = true;
-                Console.WriteLine("RabbitMQ infrastructure initialized successfully.");
-            }
-            catch (Exception ex)
-            {
-                _initializationException = ex;
-                Console.WriteLine($"Failed to initialize RabbitMQ infrastructure: {ex.Message}");
-                throw;
-            }
-        }
-        finally
-        {
-            _initializationSemaphore.Release();
-        }
     }
 
     /// <summary>
@@ -162,28 +76,35 @@ public class ChirpRabbitMqEventBus : EventBusBase, IAsyncDisposable
     public override async Task PublishAsync(IntegrationEvent @event, CancellationToken cancellationToken = default)
     {
         // Ensure infrastructure is initialized
-        await EnsureInitializedAsync(cancellationToken);
+        await EnsureInfrastructureInitializedAsync(cancellationToken);
 
-        // Confirm Connection.
-        if (!_rabbitMQConnection.IsConnected) await _rabbitMQConnection.TryConnectAsync(cancellationToken);
+        // Ensure we are connected
+        if (!_rabbitMQConnection.IsConnected) 
+        {
+            // Try to connect
+            await _rabbitMQConnection.TryConnectAsync(cancellationToken);
+        }
 
-        // Create New Channel To Send the Message.
+        // Create a channel
         using IChannel channel = await _rabbitMQConnection.CreateChannelAsync(cancellationToken);
 
-        // Create Exchange.
+        // Declare exchange (idempotent)
         await channel.ExchangeDeclareAsync(ExchangeName, ExchangeType.Direct, true, cancellationToken: cancellationToken);
 
-        // Get Basic Properties To Help Build The Publish Response.
-        BasicProperties properties = CreateBasicProperties();
+        // Create message properties
+        BasicProperties properties = new BasicProperties { DeliveryMode = DeliveryModes.Persistent };
 
-        // Build Payload.
-        byte[] payload = JsonSerializer.SerializeToUtf8Bytes(@event, @event.GetType(), _defaultJsonSerializerOptions);
+        // Serialize event to JSON
+        byte[] payload = JsonSerializer.SerializeToUtf8Bytes(@event, @event.GetType(), _jsonOptions);
 
-        // Send Message To The Objects Name.
-        await channel.BasicPublishAsync(ExchangeName, @event.GetType().Name, false, properties, payload, cancellationToken: cancellationToken);
-
-        // Close The Channel.
-        await channel.CloseAsync(cancellationToken: cancellationToken);
+        // Publish the event
+        await channel.BasicPublishAsync(
+            exchange: ExchangeName, 
+            routingKey: @event.GetType().Name, 
+            mandatory: false, 
+            basicProperties: properties, 
+            body: payload, 
+            cancellationToken: cancellationToken);
     }
 
     /// <summary>
@@ -196,349 +117,326 @@ public class ChirpRabbitMqEventBus : EventBusBase, IAsyncDisposable
         try
         {
             // Ensure infrastructure is initialized
-            await EnsureInitializedAsync(cancellationToken);
+            await EnsureInfrastructureInitializedAsync(cancellationToken);
 
-            // Try Connect If Required.
-            if (!_rabbitMQConnection.IsConnected) await _rabbitMQConnection.TryConnectAsync(cancellationToken);
-
-            // Get T TypeName.
+            // Get the event name.
             string eventName = typeof(T).Name;
 
-            // Create Channel And Bind Queue to Exchange.
-            using (IChannel bindChannel = await _rabbitMQConnection.CreateChannelAsync(cancellationToken))
+            // Log subscription
+            Console.WriteLine($"Attempting to subscribe {typeof(TH).Name} to {eventName}");
+
+            // Bind queue to exchange for this event type
+            using (IChannel channel = await _rabbitMQConnection.CreateChannelAsync(cancellationToken))
             {
-                // Bind The Queue To The Exchange.
-                await bindChannel.QueueBindAsync(_queueName, ExchangeName, eventName, cancellationToken: cancellationToken);
-                await bindChannel.CloseAsync(cancellationToken);
+                // Attempt to bind the queue.
+                await channel.QueueBindAsync(_queueName, ExchangeName, eventName, cancellationToken: cancellationToken);
             }
 
-            // Add New Subscription.
+            // Register subscription
             SubscriptionsManager.AddSubscription<T, TH>();
 
-            // Start consumer only once
-            await StartConsumeAsync(cancellationToken);
+            // Start the consumer if not already started
+            await StartConsumerAsync(cancellationToken);
 
-            Console.WriteLine($"Successfully subscribed {typeof(TH).Name} to handle {eventName} events");
+            // Log subscription
+            Console.WriteLine($"Subscribed {typeof(TH).Name} to {eventName}");
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"Error subscribing {typeof(TH).Name} to handle {typeof(T).Name} events: {ex.Message}");
+            Console.WriteLine($"Error subscribing {typeof(TH).Name}: {ex.Message}");
             throw;
         }
     }
 
-    /// <summary>
-    /// Starts consuming messages from the queue
-    /// </summary>
-    private async Task StartConsumeAsync(CancellationToken cancellationToken = default)
+    private async Task EnsureInfrastructureInitializedAsync(CancellationToken cancellationToken)
     {
-        // Use semaphore to ensure consumer is started only once
-        await _consumerSemaphore.WaitAsync(cancellationToken);
+        // Check if we are already initialized
+        if (_isInfrastructureInitialized) return;
+
+        // Acquire lock to initialize infrastructure
+        await _infrastructureLock.WaitAsync(cancellationToken);
+        
         try
         {
-            // If consumer is already started, skip
-            if (_consumerStarted)
+            // Double-check if initialized after acquiring lock
+            if (_isInfrastructureInitialized) return;
+
+            // Create the consumer channel (we keep this open)
+            _consumerChannel = await _rabbitMQConnection.CreateChannelAsync(cancellationToken);
+            _consumerChannel.CallbackExceptionAsync += OnConsumerChannelException;
+
+            // Setup Dead Letter Exchange (DLX) and Queue
+            using (IChannel channel = await _rabbitMQConnection.CreateChannelAsync(cancellationToken))
             {
-                return;
+                // Declare main exchange
+                await channel.ExchangeDeclareAsync(ExchangeName, ExchangeType.Direct, true, cancellationToken: cancellationToken);
+
+                // Declare main queue with DLX settings
+                await channel.QueueDeclareAsync(_queueName, true, false, false, null, cancellationToken: cancellationToken);
+
+                // Setup DLX
+                await channel.ExchangeDeclareAsync(DlxExchangeName, ExchangeType.Direct, true, cancellationToken: cancellationToken);
+
+                // Setup DLX Queue
+                await channel.QueueDeclareAsync(_dlxQueueName, true, false, false, null, cancellationToken: cancellationToken);
+
+                // Bind DLX Queue to DLX Exchange
+                await channel.QueueBindAsync(_dlxQueueName, DlxExchangeName, _dlxQueueName, cancellationToken: cancellationToken);
             }
 
-            if (_consumerChannel == null)
-            {
-                Console.WriteLine("Warning: Consumer channel is not initialized. Skipping StartConsume.");
-                return;
-            }
-
-            try
-            {
-                AsyncEventingBasicConsumer consumer = new(_consumerChannel);
-                consumer.ReceivedAsync += Consumer_Received;
-                await _consumerChannel.BasicConsumeAsync(_queueName, false, consumer, cancellationToken: cancellationToken);
-                _consumerStarted = true;
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"Error starting consume: {ex.Message}");
-                
-                // Recreate consumer channel and retry
-                _consumerChannel = await CreateConsumerChannelAsync(cancellationToken);
-                
-                AsyncEventingBasicConsumer consumer = new(_consumerChannel);
-                consumer.ReceivedAsync += Consumer_Received;
-                await _consumerChannel.BasicConsumeAsync(_queueName, false, consumer, cancellationToken: cancellationToken);
-                _consumerStarted = true;
-            }
+            // Mark as initialized
+            _isInfrastructureInitialized = true;
+            Console.WriteLine("RabbitMQ infrastructure initialized.");
         }
         finally
         {
-            _consumerSemaphore.Release();
+            _infrastructureLock.Release();
         }
     }
 
-    /// <summary>
-    /// Handles received messages from RabbitMQ
-    /// </summary>
-    private async Task Consumer_Received(object sender, BasicDeliverEventArgs @event)
+    private async Task StartConsumerAsync(CancellationToken cancellationToken)
     {
-        // Assign The Event Name.
-        string? eventName = @event.RoutingKey;
+        // Check if consumer already started
+        if (_isConsumerStarted) return;
 
-        // Change The Routing Key To The Original And Try Again.
-        if (@event.BasicProperties.Headers != null
-            && @event.BasicProperties.IsHeadersPresent()
-            && @event.BasicProperties.Headers.TryGetValue("x-chirp-event", out object? chirpEventName))
+        // Acquire lock to start consumer
+        await _infrastructureLock.WaitAsync(cancellationToken);
+        try
         {
-            // Get The Original EventName.
-            eventName = Encoding.UTF8.GetString(chirpEventName as byte[] ?? []);
-        }
+            // Double-check if consumer started after acquiring lock
+            if (_isConsumerStarted) return;
 
-        string message = Encoding.UTF8.GetString(@event.Body.Span);
-        int retries = 0;
-
-        // Check The Headers For The Original Queue Name
-        // And Also How Many Times Before This Message Has Been Sent.
-        if (@event.BasicProperties.Headers != null
-            && @event.BasicProperties.IsHeadersPresent()
-            && @event.BasicProperties.Headers.TryGetValue("x-chirp-retry", out object? count) && count != null)
-        {
-            if (!int.TryParse(count.ToString(), out retries))
+            // Ensure consumer channel is available
+            if (_consumerChannel == null || _consumerChannel.IsClosed)
             {
-                // Shouldn't Get Here.
-                // If So, We Should Probs Push This Message To A Bucket.
+                // Create the consumer channel
+                _consumerChannel = await _rabbitMQConnection.CreateChannelAsync(cancellationToken);
+
+                // Register exception handler
+                _consumerChannel.CallbackExceptionAsync += OnConsumerChannelException;
+            }
+
+            // Set prefetch count for fair dispatch,
+            // This is to stop RMQ from sending multiple messages to a consumer.
+            await _consumerChannel.BasicQosAsync(
+                prefetchSize: 0,
+                prefetchCount: 1,
+                global: false,
+                cancellationToken: cancellationToken);
+
+            // Create the async consumer
+            AsyncEventingBasicConsumer consumer = new AsyncEventingBasicConsumer(_consumerChannel);
+
+            // Register the received event handler
+            consumer.ReceivedAsync += OnMessageReceivedAsync;
+
+            // Start consuming (this is the missing part)
+            await _consumerChannel.BasicConsumeAsync(
+                queue: _queueName,
+                autoAck: false,
+                consumer: consumer,
+                cancellationToken: cancellationToken);
+
+            // Mark as started
+            _isConsumerStarted = true;
+        }
+        finally
+        {
+            _infrastructureLock.Release();
+        }
+    }
+
+    private async Task OnMessageReceivedAsync(object sender, BasicDeliverEventArgs eventArgs)
+    {
+        string eventName = eventArgs.RoutingKey;
+        string message = Encoding.UTF8.GetString(eventArgs.Body.Span);
+        int retryCount = 0;
+
+        // Extract headers (retry count, original event name)
+        if (eventArgs.BasicProperties.Headers != null)
+        {
+            // Get original event name if present
+            if (eventArgs.BasicProperties.Headers.TryGetValue("x-chirp-event", 
+                out object? nameBytes) && nameBytes is byte[] bytes)
+            {
+                // Override event name from header
+                eventName = Encoding.UTF8.GetString(bytes);
+            }
+
+            // Get retry count if present
+            if (eventArgs.BasicProperties.Headers.TryGetValue("x-chirp-retry", out object? countObj) 
+                && int.TryParse(countObj?.ToString(), out int count))
+            {
+                retryCount = count;
             }
         }
 
         try
         {
-            // Guard Clauses.
-            if (string.IsNullOrWhiteSpace(eventName))
-            {
-                throw new Exception("Event name is missing in the message.");
-            }
-            if (string.IsNullOrWhiteSpace(message))
-            {
-                throw new Exception("Message body is empty.");
-            }
-            if (_consumerChannel == null)
-            {
-                throw new Exception("Consumer channel is not initialized.");
-            }
-
-            // Process Event.
+            // Process the event
             await ProcessEvent(eventName, message);
 
-            // Acknowledge Message.
-            await _consumerChannel.BasicAckAsync(@event.DeliveryTag, false);
+            // Acknowledge the message
+            await _consumerChannel!.BasicAckAsync(eventArgs.DeliveryTag, false);
         }
         catch (Exception ex)
         {
-            BasicProperties properties = CreateBasicProperties();
-
-            // Headers
-            properties.Headers = @event.BasicProperties.IsHeadersPresent()
-                ? new Dictionary<string, object?>(@event.BasicProperties.Headers!)
-                : new Dictionary<string, object?>();
-
-            properties.Headers["x-chirp-event"] = eventName ?? "";
-            properties.Headers["x-chirp-exception"] = ex.Message;
-
-            // Check If We Should Retry.
-            if (retries < _retryMax)
-            {
-                // Increment Retry Count.
-                properties.Headers["x-chirp-retry"] = ++retries;
-
-                // Consider removing this delay and using TTL retry queues instead
-                await Task.Delay(TimeSpan.FromSeconds(Math.Min(30, retries)));
-
-                // IMPORTANT: publish then ack (at-least-once) so we don't lose messages if publish fails
-                // And we dont have duplicate messages.
-                await _consumerChannel!.BasicPublishAsync(
-                    ExchangeName,
-                    eventName ?? @event.RoutingKey,
-                    mandatory: false,
-                    properties,
-                    @event.Body.ToArray());
-
-                await _consumerChannel.BasicAckAsync(@event.DeliveryTag, multiple: false);
-            }
-            else
-            {
-                await PublishToDLXAsync(@event, properties, cancellationToken: @event.CancellationToken);
-
-                // Make sure the message is not redelivered forever
-                await _consumerChannel!.BasicAckAsync(@event.DeliveryTag, multiple: false);
-            }
+            Console.WriteLine($"Error processing event {eventName}: {ex.Message}");
+            await HandleProcessingFailureAsync(eventArgs, eventName, retryCount, ex);
         }
     }
 
-    /// <summary>
-    /// Publishes a failed message to the dead letter exchange
-    /// </summary>
-    private async Task PublishToDLXAsync(BasicDeliverEventArgs @event, BasicProperties properties, CancellationToken cancellationToken = default)
+    private async Task HandleProcessingFailureAsync(BasicDeliverEventArgs eventArgs, string eventName, int retryCount, Exception ex)
     {
-        // Push To A Bucket.
-        // Create New Channel To Send the Message.
-        using (IChannel channel = await _rabbitMQConnection.CreateChannelAsync(cancellationToken))
+        if (retryCount < _retryMax)
         {
-            // Create Exchange.
-            await channel.ExchangeDeclareAsync(DlxExchangeName, ExchangeType.Direct, true, cancellationToken: cancellationToken);
+            // Retry: Publish back to the queue with incremented retry count
+            BasicProperties properties = new BasicProperties
+            {
+                DeliveryMode = DeliveryModes.Persistent,
+                Headers = new Dictionary<string, object?>
+                {
+                    ["x-chirp-event"] = eventName,
+                    ["x-chirp-retry"] = retryCount + 1,
+                    ["x-chirp-exception"] = ex.Message
+                }
+            };
 
-            // Send Message To The Objects Name.
-            await channel.BasicPublishAsync(DlxExchangeName, _dlxQueueName, mandatory: false, properties, @event.Body.Span.ToArray(), cancellationToken: cancellationToken);
+            // Simple backoff
+            await Task.Delay(TimeSpan.FromSeconds(Math.Min(30, retryCount + 1)));
+
+            await _consumerChannel!.BasicPublishAsync(
+                exchange: ExchangeName,
+                routingKey: eventName, 
+                mandatory: false, 
+                basicProperties: properties, 
+                body: eventArgs.Body.ToArray());
+
+            await _consumerChannel.BasicAckAsync(eventArgs.DeliveryTag, false);
         }
+        else
+        {
+            // Dead Letter: Publish to DLX
+            BasicProperties properties = new()
+            {
+                DeliveryMode = DeliveryModes.Persistent,
+                Headers = new Dictionary<string, object?>
+                {
+                    ["x-chirp-event"] = eventName,
+                    ["x-chirp-exception"] = ex.Message,
+                    ["x-chirp-failed-at"] = DateTime.UtcNow.ToString("O")
+                }
+            };
 
-        // Tell The Consumer All Is Ok As We Don't Want The Same
-        // Message In Two Places.
-        await _consumerChannel.BasicAckAsync(@event.DeliveryTag, false, cancellationToken);
+            // We need a channel to publish to DLX (can use consumer channel or new one)
+            // Using a new one is safer to avoid blocking consumer
+            using IChannel channel = await _rabbitMQConnection.CreateChannelAsync();
+            await channel.BasicPublishAsync(
+                exchange: DlxExchangeName,
+                routingKey: _dlxQueueName,
+                mandatory: false,
+                basicProperties: properties,
+                body: eventArgs.Body.ToArray());
+
+            await _consumerChannel!.BasicAckAsync(eventArgs.DeliveryTag, false);
+        }
     }
 
-    /// <summary>
-    /// Processes an event by invoking the appropriate handlers
-    /// </summary>
     private async Task ProcessEvent(string eventName, string message)
     {
-        // Wait for EventHandlers.
-        int counter = 0;
-
-        // Wait For The Handlers To Be All Loaded.
-        while (!SubscriptionsManager.HasSubscriptionsForEvent(eventName))
+        // Check if there are subscriptions for this event
+        if (!SubscriptionsManager.HasSubscriptionsForEvent(eventName))
         {
-            if (counter < _retryMax)
-            {
-                await Task.Delay(TimeSpan.FromSeconds(5));
-                counter++;
-            }
-            else
-            {
-                throw new Exception($"Unable To Get Subscription For ${eventName}");
-            }
+            Console.WriteLine($"No subscription for event: {eventName}");
+            return;
         }
 
-        // Important fix: Use ServiceProvider directly first to try to find singleton/transient handlers
-        // that might have been directly retrieved in tests
+        // Get all handlers for this event, There could be multiple.
         IEnumerable<SubscriptionInfo> subscriptions = SubscriptionsManager.GetHandlersForEvent(eventName);
+       
+        // Always create a scope to resolve handlers.
+        // This supports Scoped services (like DbContext) and avoids scope validation errors
+        // when trying to resolve scoped services from the root provider.
+        await using AsyncServiceScope scope = ServiceProvider.CreateAsyncScope();
 
-        // Process using both ServiceProvider and a new scope to ensure handlers are found
-        // in various registration scenarios
-        bool anyHandled = await ProcessHandlers(subscriptions, ServiceProvider, eventName, message);
-
-        // If no handlers were found in the root provider, try with a scope
-        if (!anyHandled)
-        {
-            await using AsyncServiceScope scope = ServiceProvider.CreateAsyncScope();
-            await ProcessHandlers(subscriptions, scope.ServiceProvider, eventName, message);
-        }
+        // Process each handler
+        await ProcessHandlers(subscriptions, scope.ServiceProvider, eventName, message);
     }
 
-    /// <summary>
-    /// Process event handlers from a specific service provider
-    /// </summary>
-    private async Task<bool> ProcessHandlers(
-        IEnumerable<SubscriptionInfo> subscriptions,
-        IServiceProvider provider,
-        string eventName,
-        string message)
+    private async Task<bool> ProcessHandlers(IEnumerable<SubscriptionInfo> subscriptions, IServiceProvider provider, string eventName, string message)
     {
+        // Get the event type
         bool anyHandled = false;
 
+        // Get the event type
+        Type? eventType = SubscriptionsManager.GetEventTypeByName(eventName);
+
+        // Check if event type found
+        if (eventType == null) return false;
+
+        // Deserialize the event
+        object? integrationEvent = JsonSerializer.Deserialize(message, eventType, _jsonOptions);
+
+        // Check if deserialization succeeded
+        if (integrationEvent == null) return false;
+
+        // Process each subscription
         foreach (SubscriptionInfo subscription in subscriptions)
         {
+            // Resolve the handler
             object? handler = provider.GetService(subscription.HandlerType);
+
+            // If handler not found, skip
             if (handler == null) continue;
 
-            Type? eventType = SubscriptionsManager.GetEventTypeByName(eventName) 
-                ?? throw new Exception($"Unable To Get EventType For {eventName}");
-            
-            object? integrationEvent = null;
-
-            try
-            {
-                integrationEvent = JsonSerializer.Deserialize(message, eventType, _defaultJsonSerializerOptions);
-            }
-            catch (NotSupportedException)
-            {
-                integrationEvent = JsonSerializer.Deserialize(message, eventType);
-            }
-
-            if (integrationEvent == null)
-            {
-                throw new Exception($"Failed to deserialize message for event type {eventType.Name}");
-            }
-
+            // Create the concrete handler type
             Type concreteType = typeof(IChirpIntegrationEventHandler<>).MakeGenericType(eventType);
-            var handleMethod = concreteType.GetMethod("Handle");
 
-            if (handleMethod != null)
+            // Get the Handle method
+            MethodInfo? method = concreteType.GetMethod("Handle");
+
+            // If method not found, skip
+            if (method != null)
             {
-                await Task.Yield();
-                await (Task)handleMethod.Invoke(handler, new[] { integrationEvent })!;
+                // Invoke the handler
+                await (Task)method.Invoke(handler, [integrationEvent])!;
+
+                // Mark as handled
                 anyHandled = true;
-            }
-            else
-            {
-                throw new Exception($"Handle method not found on handler {handler.GetType().Name}");
             }
         }
 
+        // Return whether any handler processed the event
         return anyHandled;
     }
 
-    /// <summary>
-    /// Creates a channel for consuming messages
-    /// </summary>
-    private async Task<IChannel> CreateConsumerChannelAsync(CancellationToken cancellationToken = default)
+    private async Task OnConsumerChannelException(object sender, CallbackExceptionEventArgs e)
     {
-        // Confirm Connection.
-        if (!_rabbitMQConnection.IsConnected)
-        {
-            await _rabbitMQConnection.TryConnectAsync(cancellationToken);
-        }
+        // Log the exception
+        Console.WriteLine($"Consumer channel error: {e.Exception.Message}");
 
-        // Create Channel.
-        IChannel channel = await _rabbitMQConnection.CreateChannelAsync(cancellationToken);
+        // Mark consumer as not started
+        _isConsumerStarted = false;
 
-        // Declare Exchange.
-        await channel.ExchangeDeclareAsync(ExchangeName, ExchangeType.Direct, true, cancellationToken: cancellationToken);
-
-        // Declare Queue.
-        await channel.QueueDeclareAsync(_queueName, true, false, false, null, cancellationToken: cancellationToken);
-
-        // Improved exception handling for channel callbacks
-        channel.CallbackExceptionAsync += Channel_CallbackExceptionAsync;
-
-        return channel;
-    }
-
-    private async Task Channel_CallbackExceptionAsync(object sender, CallbackExceptionEventArgs ea)
-    {
-        Console.WriteLine($"RabbitMQ channel exception: {ea.Exception.Message}");
-
-        // Invalidate current channel and consumer state
-        var oldChannel = Interlocked.Exchange(ref _consumerChannel, null);
-        _consumerStarted = false;
+        // Dispose the faulty channel
+        _consumerChannel?.Dispose();
+        _consumerChannel = null;
         
-        if (oldChannel != null)
+        // Try to recover
+        await Task.Delay(1000);
+
+        try 
         {
-            try { await oldChannel.DisposeAsync(); } catch { }
+            // Restart the consumer
+            await StartConsumerAsync(CancellationToken.None);
         }
-
-        // Fire-and-forget recovery (avoids any deadlock risk)
-        _ = Task.Run(async () =>
+        catch (Exception ex)
         {
-            try
-            {
-                await Task.Delay(1000); // backoff
-                if (!_rabbitMQConnection.IsConnected)
-                    await _rabbitMQConnection.TryConnectAsync(CancellationToken.None);
+            // Swallow recovery errors to avoid crashing
 
-                await EnsureInitializedAsync(CancellationToken.None);
-                await StartConsumeAsync(CancellationToken.None);
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"Failed to recover from channel exception: {ex.Message}");
-            }
-        });
+            // Log the error
+            Console.WriteLine($"Error restarting consumer: {ex.Message}");
+        }
     }
 
     /// <summary>
@@ -548,23 +446,13 @@ public class ChirpRabbitMqEventBus : EventBusBase, IAsyncDisposable
     {
         if (_consumerChannel != null)
         {
-            try
+            if (_consumerChannel.IsOpen)
             {
                 await _consumerChannel.CloseAsync();
-                await _consumerChannel.DisposeAsync();
             }
-            catch
-            {
-                // Ignore disposal errors
-            }
-            finally
-            {
-                _consumerChannel = null;
-                _consumerStarted = false;
-            }
+            await _consumerChannel.DisposeAsync();
         }
-
-        _initializationSemaphore.Dispose();
-        _consumerSemaphore.Dispose();
+        _infrastructureLock.Dispose();
+        GC.SuppressFinalize(this);
     }
 }

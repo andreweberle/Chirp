@@ -36,6 +36,11 @@ public class ChirpOptions
     public ChirpOptions AddConsumer<THandler>()
         where THandler : class
     {
+        if (Consumers.Any(c => c.HandlerType == typeof(THandler)))
+        {
+            return this;
+        }
+
         Consumers.Add(new ConsumerRegistration(typeof(THandler)));
         return this;
     }

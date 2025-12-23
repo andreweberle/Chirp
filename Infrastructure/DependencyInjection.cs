@@ -16,16 +16,12 @@ public static class DependencyInjection
     /// <param name="app">The web application</param>
     /// <param name="cancellationToken">Cancellation token</param>
     /// <returns>The web application</returns>
-    public static async Task<WebApplication> UseChirpAsync(this WebApplication app, CancellationToken cancellationToken = default)
+    public static Task<WebApplication> UseChirpAsync(this WebApplication app, CancellationToken cancellationToken = default)
     {
         // Get the event bus singleton from DI
         IChirpEventBus eventBus = app.Services.GetRequiredService<IChirpEventBus>();
 
-        // Trigger initialization by calling a method on it
-        // This ensures the infrastructure is set up before the app starts processing requests
-        await TriggerInitializationAsync(eventBus, cancellationToken);
-
-        return app;
+        return Task.FromResult(app);
     }
 
     /// <summary>
@@ -80,20 +76,6 @@ public static class DependencyInjection
         // when the singleton is created
 
         return host;
-    }
-
-    /// <summary>
-    /// Triggers initialization of the event bus to ensure it's ready
-    /// </summary>
-    private static async Task TriggerInitializationAsync(IChirpEventBus eventBus, CancellationToken cancellationToken)
-    {
-        // The event bus is already created, but we want to ensure it's ready
-        // We can do this by checking if it's a specific type and calling an internal init method
-        // For now, we'll just ensure the singleton is created (which happens in GetRequiredService)
-        
-        // If we need to force initialization, we could publish a dummy event or similar
-        // But with lazy initialization, it will happen on first real use
-        await Task.CompletedTask;
     }
 
     /// <summary>
@@ -711,18 +693,26 @@ public static class DependencyInjection
             return;
         }
 
+        // Use a HashSet to track processed (EventType, HandlerType) pairs to prevent duplicates
+        // in case the same handler implements multiple interfaces or is registered multiple times
+        HashSet<(Type, Type)> processedSubscriptions = [];
+
         foreach (ConsumerRegistration consumer in options.Consumers)
         {
             Type handlerType = consumer.HandlerType;
 
             // Find all IIntegrationEventHandler<T> interfaces implemented by the handler
-            List<Type> eventHandlerInterfaces = handlerType.GetInterfaces()
-                .Where(i => i.IsGenericType && i.GetGenericTypeDefinition() == typeof(IChirpIntegrationEventHandler<>))
-                .ToList();
+            List<Type> eventHandlerInterfaces = [.. handlerType.GetInterfaces().Where(i => i.IsGenericType && i.GetGenericTypeDefinition() == typeof(IChirpIntegrationEventHandler<>))];
 
             foreach (Type eventType in eventHandlerInterfaces.Select(handlerInterface =>
                          handlerInterface.GetGenericArguments()[0]))
             {
+                // Skip if we've already processed this combination
+                if (!processedSubscriptions.Add((eventType, handlerType)))
+                {
+                    continue;
+                }
+
                 try
                 {
                     // Create a strongly typed SubscribeAsync<T, TH> method with the correct generic parameters

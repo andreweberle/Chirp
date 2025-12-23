@@ -10,13 +10,27 @@ public class InMemoryEventBusSubscriptionsManager : IChirpEventBusSubscriptionsM
 {
     private readonly List<Type> _eventTypes = [];
     private readonly Dictionary<string, List<SubscriptionInfo>> _handlers = [];
+    private readonly Lock _lock = new();
 
     public event EventHandler<string>? OnEventRemoved;
-    public bool IsEmpty => _handlers is { Count: 0 };
+    
+    public bool IsEmpty 
+    {
+        get 
+        {
+            using (_lock.EnterScope())
+            {
+                return _handlers.Count == 0;
+            }
+        }
+    }
 
     public void Clear()
     {
-        _handlers.Clear();
+        using (_lock.EnterScope())
+        {
+            _handlers.Clear();
+        }
     }
 
     public void AddSubscription<T, TH>()
@@ -25,19 +39,26 @@ public class InMemoryEventBusSubscriptionsManager : IChirpEventBusSubscriptionsM
     {
         string eventName = GetEventKey<T>();
 
-        DoAddSubscription(typeof(TH), eventName, false);
+        using (_lock.EnterScope())
+        {
+            DoAddSubscription(typeof(TH), eventName, false);
 
-        if (!_eventTypes.Contains(typeof(T))) _eventTypes.Add(typeof(T));
+            if (!_eventTypes.Contains(typeof(T))) _eventTypes.Add(typeof(T));
+        }
     }
 
     public void RemoveSubscription<T, TH>()
         where TH : IChirpIntegrationEventHandler<T>
         where T : IntegrationEvent
     {
-        SubscriptionInfo? handlerToRemove = FindSubscriptionToRemove<T, TH>();
-        if (handlerToRemove == null) return;
         string eventName = GetEventKey<T>();
-        DoRemoveHandler(eventName, handlerToRemove);
+        using (_lock.EnterScope())
+        {
+            SubscriptionInfo? handlerToRemove = DoFindSubscriptionToRemove(eventName, typeof(TH));
+            if (handlerToRemove == null) return;
+            
+            DoRemoveHandler(eventName, handlerToRemove);
+        }
     }
 
     public IEnumerable<SubscriptionInfo> GetHandlersForEvent<T>() where T : IntegrationEvent
@@ -48,7 +69,14 @@ public class InMemoryEventBusSubscriptionsManager : IChirpEventBusSubscriptionsM
 
     public IEnumerable<SubscriptionInfo> GetHandlersForEvent(string eventName)
     {
-        return _handlers[eventName];
+        using (_lock.EnterScope())
+        {
+            if (_handlers.TryGetValue(eventName, out var handlers))
+            {
+                return handlers.ToList();
+            }
+            return [];
+        }
     }
 
     public bool HasSubscriptionsForEvent<T>() where T : IntegrationEvent
@@ -59,12 +87,18 @@ public class InMemoryEventBusSubscriptionsManager : IChirpEventBusSubscriptionsM
 
     public bool HasSubscriptionsForEvent(string eventName)
     {
-        return _handlers.ContainsKey(eventName);
+        using (_lock.EnterScope())
+        {
+            return _handlers.ContainsKey(eventName);
+        }
     }
 
     public Type? GetEventTypeByName(string eventName)
     {
-        return _eventTypes.SingleOrDefault(t => t.Name == eventName);
+        using (_lock.EnterScope())
+        {
+            return _eventTypes.SingleOrDefault(t => t.Name == eventName);
+        }
     }
 
     public string GetEventKey<T>()
@@ -74,7 +108,7 @@ public class InMemoryEventBusSubscriptionsManager : IChirpEventBusSubscriptionsM
 
     private void DoAddSubscription(Type handlerType, string eventName, bool isDynamic)
     {
-        if (!HasSubscriptionsForEvent(eventName)) _handlers.Add(eventName, []);
+        if (!_handlers.ContainsKey(eventName)) _handlers.Add(eventName, []);
 
         if (_handlers[eventName].Any(s => s.HandlerType == handlerType))
             throw new ArgumentException(
@@ -85,8 +119,11 @@ public class InMemoryEventBusSubscriptionsManager : IChirpEventBusSubscriptionsM
 
     private void DoRemoveHandler(string eventName, SubscriptionInfo subsToRemove)
     {
-        _handlers[eventName].Remove(subsToRemove);
-        if (_handlers[eventName].Count != 0) return;
+        if (!_handlers.TryGetValue(eventName, out var handlers)) return;
+        
+        handlers.Remove(subsToRemove);
+        if (handlers.Count != 0) return;
+        
         _handlers.Remove(eventName);
         Type? eventType = _eventTypes.SingleOrDefault(e => e.Name == eventName);
         if (eventType != null) _eventTypes.Remove(eventType);
@@ -100,18 +137,9 @@ public class InMemoryEventBusSubscriptionsManager : IChirpEventBusSubscriptionsM
         handler?.Invoke(this, eventName);
     }
 
-    private SubscriptionInfo? FindSubscriptionToRemove<T, TH>()
-        where T : IntegrationEvent
-        where TH : IChirpIntegrationEventHandler<T>
-    {
-        string eventName = GetEventKey<T>();
-        return DoFindSubscriptionToRemove(eventName, typeof(TH));
-    }
-
     private SubscriptionInfo? DoFindSubscriptionToRemove(string eventName, Type handlerType)
     {
-        return !HasSubscriptionsForEvent(eventName)
-            ? null
-            : _handlers[eventName].SingleOrDefault(s => s.HandlerType == handlerType);
+        if (!_handlers.TryGetValue(eventName, out var handlers)) return null;
+        return handlers.SingleOrDefault(s => s.HandlerType == handlerType);
     }
 }
