@@ -1,55 +1,41 @@
-name: Publish package to NuGet
+name: publish package to NuGet
 
 on:
   push:
-    branches:
-      - main
+    branches: [ "main" ]
 
 jobs:
-  publish:
+  build:
     runs-on: ubuntu-latest
-
     env:
-      PROJECT_PATH: Chirp.csproj
-      NUGET_SOURCE: https://api.nuget.org/v3/index.json
-      OUTPUT_DIR: ./nupkgs
+      REPOSITORY_URL: 'https://api.nuget.org/v3/index.json'
+      OUTPUT_PROJECT: 'Chirp.csproj'
 
     steps:
-      - name: Checkout source
-        uses: actions/checkout@v4
+    - uses: actions/checkout@v3
+    
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v2
+      with:
+        dotnet-version: 10.0.x
+    
+    - name: Restore dependencies
+      run: dotnet restore
+    
+    - name: Build
+      run: dotnet build --no-restore
+    
+    - name: Debug Workflow
+      run: |
+        pwd
+        ls -R
+    - name: Pack
+      run: dotnet pack ${{ env.OUTPUT_PROJECT }} -c Release -o ./artifacts
 
-      - name: Setup .NET
-        uses: actions/setup-dotnet@v4
-        with:
-          dotnet-version: 10.0.x
-
-      - name: Restore
-        run: dotnet restore ${{ env.PROJECT_PATH }}
-
-      - name: Build
-        run: dotnet build ${{ env.PROJECT_PATH }} -c Release --no-restore
-
-      - name: Pack
-        run: |
-          dotnet pack ${{ env.PROJECT_PATH }} \
-            -c Release \
-            --no-build \
-            --output ${{ env.OUTPUT_DIR }}
-
-      - name: List generated packages
-        run: |
-          pwd
-          ls -lh ${{ env.OUTPUT_DIR }}
-
-      - name: Verify NuPkg exists
-        run: ls ${{ env.OUTPUT_DIR }}/*.nupkg
-
-      - name: Publish to NuGet
-        run: |
-          for pkg in ${{ env.OUTPUT_DIR }}/*.nupkg; do
-            dotnet nuget push "$pkg" \
-              --api-key ${{ secrets.NUGET_KEY }} \
-              --source ${{ env.NUGET_SOURCE }} \
-              --skip-duplicate \
-              --verbosity minimal
-          done
+    - name: Debug Workflow
+      run: |
+        pwd
+        ls -R
+    
+    - name: Publish to NuGet 
+      run: dotnet nuget push "./artifacts/*.nupkg" --api-key ${{ secrets.NUGET_KEY }} --source ${{ env.REPOSITORY_URL }} --skip-duplicate
