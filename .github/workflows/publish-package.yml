@@ -22,8 +22,8 @@ jobs:
     - name: Restore dependencies
       run: dotnet restore
     
-    - name: Build
-      run: dotnet build --no-restore
+    - name: Build project
+      run: dotnet build Chirp.csproj -c Release
     
     - name: Debug Workflow
       run: |
