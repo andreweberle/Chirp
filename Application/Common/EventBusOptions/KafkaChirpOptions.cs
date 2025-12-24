@@ -13,7 +13,7 @@ public class KafkaChirpOptions : ChirpOptions
     /// </summary>
     public KafkaChirpOptions()
     {
-        EventBusType = Infrastructure.EventBus.EventBusType.Kafka;
+        EventBusType = EventBusType.Kafka;
     }
 
     /// <summary>

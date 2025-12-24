@@ -12,7 +12,7 @@ public class RabbitMqChirpOptions : ChirpOptions
     /// </summary>
     public RabbitMqChirpOptions()
     {
-        EventBusType = Infrastructure.EventBus.EventBusType.RabbitMQ;
+        EventBusType = EventBusType.RabbitMQ;
     }
 
     /// <summary>
@@ -88,4 +88,14 @@ public class RabbitMqChirpOptions : ChirpOptions
     /// Gets or sets the requested heartbeat interval.
     /// </summary>
     public TimeSpan RequestedHeartbeat { get; set; } = TimeSpan.FromSeconds(60);
+
+    /// <summary>
+    /// RabbitMQ port
+    /// </summary>
+    public int? Port { get; set; }
+    
+    /// <summary>
+    /// RabbitMQ Web UI port
+    /// </summary>
+    public int? WebUIPort { get; set; }
 }

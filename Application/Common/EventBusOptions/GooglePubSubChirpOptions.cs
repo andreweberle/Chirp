@@ -13,7 +13,7 @@ public class GooglePubSubChirpOptions : ChirpOptions
     /// </summary>
     public GooglePubSubChirpOptions()
     {
-        EventBusType = Infrastructure.EventBus.EventBusType.GooglePubSub;
+        EventBusType = EventBusType.GooglePubSub;
     }
 
     /// <summary>

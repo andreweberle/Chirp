@@ -13,7 +13,7 @@ public class AmazonSqsChirpOptions : ChirpOptions
     /// </summary>
     public AmazonSqsChirpOptions()
     {
-        EventBusType = Infrastructure.EventBus.EventBusType.AmazonSqs;
+        EventBusType = EventBusType.AmazonSqs;
     }
 
     /// <summary>

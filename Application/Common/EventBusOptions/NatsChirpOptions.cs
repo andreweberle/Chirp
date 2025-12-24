@@ -13,7 +13,7 @@ public class NatsChirpOptions : ChirpOptions
     /// </summary>
     public NatsChirpOptions()
     {
-        EventBusType = Infrastructure.EventBus.EventBusType.NATS;
+        EventBusType = EventBusType.NATS;
     }
 
     /// <summary>

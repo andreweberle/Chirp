@@ -14,7 +14,7 @@ public class AzureServiceBusChirpOptions : ChirpOptions
     /// </summary>
     public AzureServiceBusChirpOptions()
     {
-        EventBusType = Infrastructure.EventBus.EventBusType.AzureServiceBus;
+        EventBusType = EventBusType.AzureServiceBus;
     }
 
     /// <summary>
