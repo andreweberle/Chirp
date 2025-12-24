@@ -1,3 +1,4 @@
+using Chirp.Application.Common;
 using Chirp.Application.Common.EventBusOptions;
 using Chirp.Application.Interfaces;
 using Chirp.Domain.Common;
@@ -189,11 +190,11 @@ public class ChirpOptionsTests
     }
 
     // Test classes for consumer registration tests
-    private class TestHandler
+    private class TestHandler : IIChirpIntegrationEventHandler
     {
     }
 
-    private class AnotherTestHandler
+    private class AnotherTestHandler : IIChirpIntegrationEventHandler
     {
     }
 }

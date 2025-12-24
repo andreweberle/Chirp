@@ -2,17 +2,28 @@
 
 public static class ConnectionFactory
 {
-    public static RabbitMQ.Client.IConnectionFactory CreateConnectionFactory(string host, string username, string password)
+    public static RabbitMQ.Client.IConnectionFactory CreateConnectionFactory
+        (
+            string host,
+            string username, 
+            string password, 
+            int port,
+            bool autoRecoverEnabled, 
+            bool topologyRecoveryEnabled, 
+            TimeSpan networkRecoveryInterval,
+            TimeSpan requestedHeartbeat
+            )
     {
         return new RabbitMQ.Client.ConnectionFactory
         {
-            RequestedHeartbeat = new TimeSpan(0, 0, 60),
+            RequestedHeartbeat = requestedHeartbeat,
             HostName = host,
+            Port = port,
             UserName = username,
             Password = password,
-            AutomaticRecoveryEnabled = true,
-            TopologyRecoveryEnabled = true,
-            NetworkRecoveryInterval = TimeSpan.FromSeconds(5),
+            AutomaticRecoveryEnabled = autoRecoverEnabled,
+            TopologyRecoveryEnabled = topologyRecoveryEnabled,
+            NetworkRecoveryInterval = networkRecoveryInterval,
         };
     }
 }

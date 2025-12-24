@@ -1,3 +1,4 @@
+using Chirp.Application.Common;
 using Chirp.Application.Common.EventBusOptions;
 using Chirp.Application.Interfaces;
 using Chirp.Domain.Common;

@@ -13,7 +13,7 @@ public class RedisChirpOptions : ChirpOptions
     /// </summary>
     public RedisChirpOptions()
     {
-        EventBusType = Infrastructure.EventBus.EventBusType.Redis;
+        EventBusType = EventBusType.Redis;
     }
 
     /// <summary>

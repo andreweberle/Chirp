@@ -6,6 +6,7 @@ using Chirp.Infrastructure.EventBus;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using System.Reflection;
+using Chirp.Application.Common;
 
 namespace Chirp.Infrastructure.Tests.Infrastructure;
 

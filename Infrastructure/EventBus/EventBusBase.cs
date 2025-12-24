@@ -21,7 +21,7 @@ public abstract class EventBusBase(
     /// Publishes an event to the event bus
     /// </summary>
     /// <param name="event">The event to publish</param>
-    public abstract Task PublishAsync(IntegrationEvent @event, CancellationToken cancellationToken = default);
+    public abstract Task<bool> PublishAsync(IntegrationEvent @event, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Subscribes to an event with the specified handler

@@ -1,3 +1,4 @@
+using Chirp.Application.Common;
 using Chirp.Application.Common.EventBusOptions;
 using Chirp.Application.Interfaces;
 using Chirp.Domain.Common;
@@ -12,47 +13,6 @@ using Chirp.Infrastructure.EventBus.NATS;
 using Microsoft.Extensions.Configuration;
 
 namespace Chirp.Infrastructure.EventBus;
-
-/// <summary>
-/// Supported event bus types
-/// </summary>
-public enum EventBusType
-{
-    /// <summary>
-    /// RabbitMQ implementation
-    /// </summary>
-    RabbitMQ,
-
-    /// <summary>
-    /// Apache Kafka implementation
-    /// </summary>
-    Kafka,
-
-    /// <summary>
-    /// Azure Service Bus implementation
-    /// </summary>
-    AzureServiceBus,
-
-    /// <summary>
-    /// Amazon Simple Queue Service implementation
-    /// </summary>
-    AmazonSqs,
-
-    /// <summary>
-    /// Redis Pub/Sub implementation
-    /// </summary>
-    Redis,
-
-    /// <summary>
-    /// Google Cloud Pub/Sub implementation
-    /// </summary>
-    GooglePubSub,
-
-    /// <summary>
-    /// NATS messaging system implementation
-    /// </summary>
-    NATS
-}
 
 /// <summary>
 /// Factory for creating event bus instances
@@ -158,6 +118,9 @@ public static class EventBusFactory
 
         return eventBusType switch
         {
+            EventBusType.InMemory => throw new NotImplementedException(
+                "In-memory event bus is not implemented yet."),
+            
             EventBusType.RabbitMQ => CreateRabbitMQEventBus(
                 serviceProvider,
                 subscriptionsManager,

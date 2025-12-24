@@ -36,7 +36,7 @@ public class RabbitMqEventBusTests
     }
 
     // Test event class that simulates failure
-    public record TestFailedIntegrationEvent : IntegrationEvent
+    private record TestFailedIntegrationEvent : IntegrationEvent
     {
         public string Message { get; set; } = string.Empty;
     }

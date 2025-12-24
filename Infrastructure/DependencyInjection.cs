@@ -5,6 +5,7 @@ using Chirp.Infrastructure.EventBus;
 using Chirp.Infrastructure.EventBus.RabbitMQ;
 using RabbitMQ.Client;
 using System.Reflection;
+using Chirp.Application.Common;
 
 namespace Chirp.Infrastructure;
 
@@ -64,427 +65,363 @@ public static class DependencyInjection
         return host;
     }
 
-    /// <summary>
-    /// Adds Chirp messaging services to the service collection with a fluent configuration API
-    /// </summary>
     /// <param name="services">The service collection</param>
-    /// <param name="configureOptions">Action to configure options</param>
-    /// <param name="configuration">The configuration (required)</param>
-    /// <returns>The service collection</returns>
-    public static IServiceCollection AddChirp(
-        this IServiceCollection services,
-        Action<ChirpOptions> configureOptions,
-        IConfiguration configuration)
+    extension(IServiceCollection services)
     {
-        ArgumentNullException.ThrowIfNull(configuration);
-        ChirpOptions options = new();
-        configureOptions(options);
-
-        // Register consumers first so they're available when the event bus is created
-        RegisterConsumers(services, options);
-
-        // Register event bus using options
-        services = AddEventBus(
-            services,
-            configuration,
-            options);
-
-        return services;
-    }
-
-    /// <summary>
-    /// Adds Chirp messaging services with RabbitMQ implementation
-    /// </summary>
-    /// <param name="services">The service collection</param>
-    /// <param name="configureOptions">Action to configure RabbitMQ options</param>
-    /// <param name="configuration">The configuration (required)</param>
-    /// <returns>The service collection</returns>
-    public static IServiceCollection AddChirp(
-        this IServiceCollection services,
-        Action<RabbitMqChirpOptions> configureOptions,
-        IConfiguration configuration)
-    {
-        ArgumentNullException.ThrowIfNull(configuration);
-
-        RabbitMqChirpOptions options = new();
-        configureOptions(options);
-
-        // Register consumers first so they're available when the event bus is created
-        RegisterConsumers(services, options);
-
-        // Register event bus using options
-        services = AddEventBus(
-            services,
-            configuration,
-            options);
-
-        return services;
-    }
-
-    /// <summary>
-    /// Adds Chirp messaging services with Kafka implementation
-    /// </summary>
-    /// <param name="services">The service collection</param>
-    /// <param name="configureOptions">Action to configure Kafka options</param>
-    /// <param name="configuration">The configuration (required)</param>
-    /// <returns>The service collection</returns>
-    public static IServiceCollection AddChirp(
-        this IServiceCollection services,
-        Action<KafkaChirpOptions> configureOptions,
-        IConfiguration configuration)
-    {
-        ArgumentNullException.ThrowIfNull(configuration);
-
-        KafkaChirpOptions options = new();
-        configureOptions(options);
-
-        // Register consumers first so they're available when the event bus is created
-        RegisterConsumers(services, options);
-
-        // Register event bus using options
-        services = AddEventBus(
-            services,
-            configuration,
-            options);
-
-        return services;
-    }
-
-    /// <summary>
-    /// Adds Chirp messaging services with Azure Service Bus implementation
-    /// </summary>
-    /// <param name="services">The service collection</param>
-    /// <param name="configureOptions">Action to configure Azure Service Bus options</param>
-    /// <param name="configuration">The configuration (required)</param>
-    /// <returns>The service collection</returns>
-    public static IServiceCollection AddChirp(
-        this IServiceCollection services,
-        Action<AzureServiceBusChirpOptions> configureOptions,
-        IConfiguration configuration)
-    {
-        ArgumentNullException.ThrowIfNull(configuration);
-
-        AzureServiceBusChirpOptions options = new();
-        configureOptions(options);
-
-        // Register consumers first so they're available when the event bus is created
-        RegisterConsumers(services, options);
-
-        // Register event bus using options
-        services = AddEventBus(
-            services,
-            configuration,
-            options);
-
-        return services;
-    }
-
-    /// <summary>
-    /// Adds Chirp messaging services with Amazon SQS implementation
-    /// </summary>
-    /// <param name="services">The service collection</param>
-    /// <param name="configureOptions">Action to configure Amazon SQS options</param>
-    /// <param name="configuration">The configuration (required)</param>
-    /// <returns>The service collection</returns>
-    public static IServiceCollection AddChirp(
-        this IServiceCollection services,
-        Action<AmazonSqsChirpOptions> configureOptions,
-        IConfiguration configuration)
-    {
-        ArgumentNullException.ThrowIfNull(configuration);
-
-        AmazonSqsChirpOptions options = new();
-        configureOptions(options);
-
-        // Register consumers first so they're available when the event bus is created
-        RegisterConsumers(services, options);
-
-        // Register event bus using options
-        services = AddEventBus(
-            services,
-            configuration,
-            options);
-
-        return services;
-    }
-
-    /// <summary>
-    /// Adds Chirp messaging services with Redis implementation
-    /// </summary>
-    /// <param name="services">The service collection</param>
-    /// <param name="configureOptions">Action to configure Redis options</param>
-    /// <param name="configuration">The configuration (required)</param>
-    /// <returns>The service collection</returns>
-    public static IServiceCollection AddChirp(
-        this IServiceCollection services,
-        Action<RedisChirpOptions> configureOptions,
-        IConfiguration configuration)
-    {
-        ArgumentNullException.ThrowIfNull(configuration);
-
-        RedisChirpOptions options = new();
-        configureOptions(options);
-
-        // Register consumers first so they're available when the event bus is created
-        RegisterConsumers(services, options);
-
-        // Register event bus using options
-        services = AddEventBus(
-            services,
-            configuration,
-            options);
-
-        return services;
-    }
-
-    /// <summary>
-    /// Adds Chirp messaging services with Google Pub/Sub implementation
-    /// </summary>
-    /// <param name="services">The service collection</param>
-    /// <param name="configureOptions">Action to configure Google Pub/Sub options</param>
-    /// <param name="configuration">The configuration (required)</param>
-    /// <returns>The service collection</returns>
-    public static IServiceCollection AddChirp(
-        this IServiceCollection services,
-        Action<GooglePubSubChirpOptions> configureOptions,
-        IConfiguration configuration)
-    {
-        ArgumentNullException.ThrowIfNull(configuration);
-
-        GooglePubSubChirpOptions options = new();
-        configureOptions(options);
-
-        // Register consumers first so they're available when the event bus is created
-        RegisterConsumers(services, options);
-
-        // Register event bus using options
-        services = AddEventBus(
-            services,
-            configuration,
-            options);
-
-        return services;
-    }
-
-    /// <summary>
-    /// Adds Chirp messaging services with NATS implementation
-    /// </summary>
-    /// <param name="services">The service collection</param>
-    /// <param name="configureOptions">Action to configure NATS options</param>
-    /// <param name="configuration">The configuration (required)</param>
-    /// <returns>The service collection</returns>
-    public static IServiceCollection AddChirp(
-        this IServiceCollection services,
-        Action<NatsChirpOptions> configureOptions,
-        IConfiguration configuration)
-    {
-        ArgumentNullException.ThrowIfNull(configuration);
-
-        NatsChirpOptions options = new();
-        configureOptions(options);
-
-        // Register consumers first so they're available when the event bus is created
-        RegisterConsumers(services, options);
-
-        // Register event bus using options
-        services = AddEventBus(
-            services,
-            configuration,
-            options);
-
-        return services;
-    }
-
-    /// <summary>
-    /// Adds Chirp messaging services to the service collection with a fluent configuration API
-    /// </summary>
-    /// <param name="services">The service collection</param>
-    /// <param name="configureOptions">Action to configure options</param>
-    /// <returns>The service collection</returns>
-    public static IServiceCollection AddChirp(
-        this IServiceCollection services,
-        Action<ChirpOptions> configureOptions)
-    {
-        // Get IConfiguration from service descriptors directly
-        ServiceDescriptor? configDescriptor = services.FirstOrDefault(d =>
-            d.ServiceType == typeof(IConfiguration));
-
-        if (configDescriptor?.ImplementationInstance is IConfiguration configuration)
+        /// <summary>
+        /// Adds Chirp messaging services to the service collection with a fluent configuration API
+        /// </summary>
+        /// <param name="configureOptions">Action to configure options</param>
+        /// <param name="configuration">The configuration (required)</param>
+        /// <returns>The service collection</returns>
+        public IServiceCollection AddChirp(Action<ChirpOptions> configureOptions,
+            IConfiguration configuration)
         {
-            return AddChirp(services, configureOptions, configuration);
+            ArgumentNullException.ThrowIfNull(configuration);
+            ChirpOptions options = new();
+            configureOptions(options);
+
+            // Register consumers first so they're available when the event bus is created
+            RegisterConsumers(services, options);
+
+            // Register event bus using options
+            services = AddEventBus(
+                services,
+                configuration,
+                options);
+
+            return services;
         }
 
-        throw new InvalidOperationException(
-            "IConfiguration is not registered in the service collection. " +
-            "Please register IConfiguration before calling AddChirp or use the overload that accepts IConfiguration.");
-    }
-
-    /// <summary>
-    /// Adds RabbitMQ Chirp messaging services with type-specific configuration
-    /// </summary>
-    /// <param name="services">The service collection</param>
-    /// <param name="configureOptions">Action to configure RabbitMQ options</param>
-    /// <returns>The service collection</returns>
-    public static IServiceCollection AddChirp(
-        this IServiceCollection services,
-        Action<RabbitMqChirpOptions> configureOptions)
-    {
-        // Get IConfiguration from service descriptors directly
-        ServiceDescriptor? configDescriptor = services.FirstOrDefault(d =>
-            d.ServiceType == typeof(IConfiguration));
-
-        if (configDescriptor?.ImplementationInstance is IConfiguration configuration)
+        /// <summary>
+        /// Adds Chirp messaging services with RabbitMQ implementation
+        /// </summary>
+        /// <param name="configureOptions">Action to configure RabbitMQ options</param>
+        /// <param name="configuration">The configuration (required)</param>
+        /// <returns>The service collection</returns>
+        public IServiceCollection AddChirp(Action<RabbitMqChirpOptions> configureOptions,
+            IConfiguration configuration)
         {
-            return AddChirp(services, configureOptions, configuration);
+            ArgumentNullException.ThrowIfNull(configuration);
+
+            RabbitMqChirpOptions options = new();
+            configureOptions(options);
+
+            // Register consumers first so they're available when the event bus is created
+            RegisterConsumers(services, options);
+
+            // Register event bus using options
+            services = services.AddEventBus(configuration, options);
+        
+            // Return the service collection
+            return services;
         }
 
-        throw new InvalidOperationException(
-            "IConfiguration is not registered in the service collection. " +
-            "Please register IConfiguration before calling AddChirp or use the overload that accepts IConfiguration.");
-    }
-
-    /// <summary>
-    /// Adds Kafka Chirp messaging services with type-specific configuration
-    /// </summary>
-    /// <param name="services">The service collection</param>
-    /// <param name="configureOptions">Action to configure Kafka options</param>
-    /// <returns>The service collection</returns>
-    public static IServiceCollection AddChirp(
-        this IServiceCollection services,
-        Action<KafkaChirpOptions> configureOptions)
-    {
-        // Get IConfiguration from service descriptors directly
-        ServiceDescriptor? configDescriptor = services.FirstOrDefault(d =>
-            d.ServiceType == typeof(IConfiguration));
-
-        if (configDescriptor?.ImplementationInstance is IConfiguration configuration)
+        /// <summary>
+        /// Adds Chirp messaging services with Kafka implementation
+        /// </summary>
+        /// <param name="configureOptions">Action to configure Kafka options</param>
+        /// <param name="configuration">The configuration (required)</param>
+        /// <returns>The service collection</returns>
+        public IServiceCollection AddChirp(Action<KafkaChirpOptions> configureOptions,
+            IConfiguration configuration)
         {
-            return AddChirp(services, configureOptions, configuration);
+            ArgumentNullException.ThrowIfNull(configuration);
+
+            KafkaChirpOptions options = new();
+            configureOptions(options);
+
+            // Register consumers first so they're available when the event bus is created
+            RegisterConsumers(services, options);
+
+            // Register event bus using options
+            services = services.AddEventBus(configuration, options);
+
+            return services;
         }
 
-        throw new InvalidOperationException(
-            "IConfiguration is not registered in the service collection. " +
-            "Please register IConfiguration before calling AddChirp or use the overload that accepts IConfiguration.");
-    }
-
-    /// <summary>
-    /// Adds Azure Service Bus Chirp messaging services with type-specific configuration
-    /// </summary>
-    /// <param name="services">The service collection</param>
-    /// <param name="configureOptions">Action to configure Azure Service Bus options</param>
-    /// <returns>The service collection</returns>
-    public static IServiceCollection AddChirp(
-        this IServiceCollection services,
-        Action<AzureServiceBusChirpOptions> configureOptions)
-    {
-        // Get IConfiguration from service descriptors directly
-        ServiceDescriptor? configDescriptor = services.FirstOrDefault(d =>
-            d.ServiceType == typeof(IConfiguration));
-
-        if (configDescriptor?.ImplementationInstance is IConfiguration configuration)
+        /// <summary>
+        /// Adds Chirp messaging services with Azure Service Bus implementation
+        /// </summary>
+        /// <param name="configureOptions">Action to configure Azure Service Bus options</param>
+        /// <param name="configuration">The configuration (required)</param>
+        /// <returns>The service collection</returns>
+        public IServiceCollection AddChirp(Action<AzureServiceBusChirpOptions> configureOptions,
+            IConfiguration configuration)
         {
-            return AddChirp(services, configureOptions, configuration);
+            ArgumentNullException.ThrowIfNull(configuration);
+
+            AzureServiceBusChirpOptions options = new();
+            configureOptions(options);
+
+            // Register consumers first so they're available when the event bus is created
+            RegisterConsumers(services, options);
+
+            // Register event bus using options
+            services = services.AddEventBus(configuration, options);
+
+            return services;
         }
 
-        throw new InvalidOperationException(
-            "IConfiguration is not registered in the service collection. " +
-            "Please register IConfiguration before calling AddChirp or use the overload that accepts IConfiguration.");
-    }
-
-    /// <summary>
-    /// Adds Amazon SQS Chirp messaging services with type-specific configuration
-    /// </summary>
-    /// <param name="services">The service collection</param>
-    /// <param name="configureOptions">Action to configure Amazon SQS options</param>
-    /// <returns>The service collection</returns>
-    public static IServiceCollection AddChirp(
-        this IServiceCollection services,
-        Action<AmazonSqsChirpOptions> configureOptions)
-    {
-        // Get IConfiguration from service descriptors directly
-        ServiceDescriptor? configDescriptor = services.FirstOrDefault(d =>
-            d.ServiceType == typeof(IConfiguration));
-
-        if (configDescriptor?.ImplementationInstance is IConfiguration configuration)
+        /// <summary>
+        /// Adds Chirp messaging services with Amazon SQS implementation
+        /// </summary>
+        /// <param name="configureOptions">Action to configure Amazon SQS options</param>
+        /// <param name="configuration">The configuration (required)</param>
+        /// <returns>The service collection</returns>
+        public IServiceCollection AddChirp(Action<AmazonSqsChirpOptions> configureOptions,
+            IConfiguration configuration)
         {
-            return AddChirp(services, configureOptions, configuration);
+            ArgumentNullException.ThrowIfNull(configuration);
+
+            AmazonSqsChirpOptions options = new();
+            configureOptions(options);
+
+            // Register consumers first so they're available when the event bus is created
+            RegisterConsumers(services, options);
+
+            // Register event bus using options
+            services = services.AddEventBus(configuration, options);
+
+            return services;
         }
 
-        throw new InvalidOperationException(
-            "IConfiguration is not registered in the service collection. " +
-            "Please register IConfiguration before calling AddChirp or use the overload that accepts IConfiguration.");
-    }
-
-    /// <summary>
-    /// Adds Redis Chirp messaging services with type-specific configuration
-    /// </summary>
-    /// <param name="services">The service collection</param>
-    /// <param name="configureOptions">Action to configure Redis options</param>
-    /// <returns>The service collection</returns>
-    public static IServiceCollection AddChirp(
-        this IServiceCollection services,
-        Action<RedisChirpOptions> configureOptions)
-    {
-        // Get IConfiguration from service descriptors directly
-        ServiceDescriptor? configDescriptor = services.FirstOrDefault(d =>
-            d.ServiceType == typeof(IConfiguration));
-
-        if (configDescriptor?.ImplementationInstance is IConfiguration configuration)
+        /// <summary>
+        /// Adds Chirp messaging services with Redis implementation
+        /// </summary>
+        /// <param name="configureOptions">Action to configure Redis options</param>
+        /// <param name="configuration">The configuration (required)</param>
+        /// <returns>The service collection</returns>
+        public IServiceCollection AddChirp(Action<RedisChirpOptions> configureOptions,
+            IConfiguration configuration)
         {
-            return AddChirp(services, configureOptions, configuration);
+            ArgumentNullException.ThrowIfNull(configuration);
+
+            RedisChirpOptions options = new();
+            configureOptions(options);
+
+            // Register consumers first so they're available when the event bus is created
+            RegisterConsumers(services, options);
+
+            // Register event bus using options
+            services = services.AddEventBus(configuration, options);
+
+            return services;
         }
 
-        throw new InvalidOperationException(
-            "IConfiguration is not registered in the service collection. " +
-            "Please register IConfiguration before calling AddChirp or use the overload that accepts IConfiguration.");
-    }
-
-    /// <summary>
-    /// Adds Google Pub/Sub Chirp messaging services with type-specific configuration
-    /// </summary>
-    /// <param name="services">The service collection</param>
-    /// <param name="configureOptions">Action to configure Google Pub/Sub options</param>
-    /// <returns>The service collection</returns>
-    public static IServiceCollection AddChirp(
-        this IServiceCollection services,
-        Action<GooglePubSubChirpOptions> configureOptions)
-    {
-        // Get IConfiguration from service descriptors directly
-        ServiceDescriptor? configDescriptor = services.FirstOrDefault(d =>
-            d.ServiceType == typeof(IConfiguration));
-
-        if (configDescriptor?.ImplementationInstance is IConfiguration configuration)
+        /// <summary>
+        /// Adds Chirp messaging services with Google Pub/Sub implementation
+        /// </summary>
+        /// <param name="configureOptions">Action to configure Google Pub/Sub options</param>
+        /// <param name="configuration">The configuration (required)</param>
+        /// <returns>The service collection</returns>
+        public IServiceCollection AddChirp(Action<GooglePubSubChirpOptions> configureOptions,
+            IConfiguration configuration)
         {
-            return AddChirp(services, configureOptions, configuration);
+            ArgumentNullException.ThrowIfNull(configuration);
+
+            GooglePubSubChirpOptions options = new();
+            configureOptions(options);
+
+            // Register consumers first so they're available when the event bus is created
+            RegisterConsumers(services, options);
+
+            // Register event bus using options
+            services = services.AddEventBus(configuration, options);
+
+            return services;
         }
 
-        throw new InvalidOperationException(
-            "IConfiguration is not registered in the service collection. " +
-            "Please register IConfiguration before calling AddChirp or use the overload that accepts IConfiguration.");
-    }
-
-    /// <summary>
-    /// Adds NATS Chirp messaging services with type-specific configuration
-    /// </summary>
-    /// <param name="services">The service collection</param>
-    /// <param name="configureOptions">Action to configure NATS options</param>
-    /// <returns>The service collection</returns>
-    public static IServiceCollection AddChirp(
-        this IServiceCollection services,
-        Action<NatsChirpOptions> configureOptions)
-    {
-        // Get IConfiguration from service descriptors directly
-        ServiceDescriptor? configDescriptor = services.FirstOrDefault(d =>
-            d.ServiceType == typeof(IConfiguration));
-
-        if (configDescriptor?.ImplementationInstance is IConfiguration configuration)
+        /// <summary>
+        /// Adds Chirp messaging services with NATS implementation
+        /// </summary>
+        /// <param name="configureOptions">Action to configure NATS options</param>
+        /// <param name="configuration">The configuration (required)</param>
+        /// <returns>The service collection</returns>
+        public IServiceCollection AddChirp(Action<NatsChirpOptions> configureOptions,
+            IConfiguration configuration)
         {
-            return AddChirp(services, configureOptions, configuration);
+            ArgumentNullException.ThrowIfNull(configuration);
+
+            NatsChirpOptions options = new();
+            configureOptions(options);
+
+            // Register consumers first so they're available when the event bus is created
+            RegisterConsumers(services, options);
+
+            // Register event bus using options
+            services = services.AddEventBus(configuration, options);
+
+            return services;
         }
 
-        throw new InvalidOperationException(
-            "IConfiguration is not registered in the service collection. " +
-            "Please register IConfiguration before calling AddChirp or use the overload that accepts IConfiguration.");
+        /// <summary>
+        /// Adds Chirp messaging services to the service collection with a fluent configuration API
+        /// </summary>
+        /// <param name="configureOptions">Action to configure options</param>
+        /// <returns>The service collection</returns>
+        public IServiceCollection AddChirp(Action<ChirpOptions> configureOptions)
+        {
+            // Get IConfiguration from service descriptors directly
+            ServiceDescriptor? configDescriptor = services.FirstOrDefault(d =>
+                d.ServiceType == typeof(IConfiguration));
+
+            if (configDescriptor?.ImplementationInstance is IConfiguration configuration)
+            {
+                return services.AddChirp(configureOptions, configuration);
+            }
+
+            throw new InvalidOperationException(
+                "IConfiguration is not registered in the service collection. " +
+                "Please register IConfiguration before calling AddChirp or use the overload that accepts IConfiguration.");
+        }
+
+        /// <summary>
+        /// Adds RabbitMQ Chirp messaging services with type-specific configuration
+        /// </summary>
+        /// <param name="configureOptions">Action to configure RabbitMQ options</param>
+        /// <returns>The service collection</returns>
+        public IServiceCollection AddChirp(Action<RabbitMqChirpOptions> configureOptions)
+        {
+            // Get IConfiguration from service descriptors directly
+            ServiceDescriptor? configDescriptor = services.FirstOrDefault(d =>
+                d.ServiceType == typeof(IConfiguration));
+
+            if (configDescriptor?.ImplementationInstance is IConfiguration configuration)
+            {
+                return services.AddChirp(configureOptions, configuration);
+            }
+
+            throw new InvalidOperationException(
+                "IConfiguration is not registered in the service collection. " +
+                "Please register IConfiguration before calling AddChirp or use the overload that accepts IConfiguration.");
+        }
+
+        /// <summary>
+        /// Adds Kafka Chirp messaging services with type-specific configuration
+        /// </summary>
+        /// <param name="configureOptions">Action to configure Kafka options</param>
+        /// <returns>The service collection</returns>
+        public IServiceCollection AddChirp(Action<KafkaChirpOptions> configureOptions)
+        {
+            // Get IConfiguration from service descriptors directly
+            ServiceDescriptor? configDescriptor = services.FirstOrDefault(d =>
+                d.ServiceType == typeof(IConfiguration));
+
+            if (configDescriptor?.ImplementationInstance is IConfiguration configuration)
+            {
+                return services.AddChirp(configureOptions, configuration);
+            }
+
+            throw new InvalidOperationException(
+                "IConfiguration is not registered in the service collection. " +
+                "Please register IConfiguration before calling AddChirp or use the overload that accepts IConfiguration.");
+        }
+
+        /// <summary>
+        /// Adds Azure Service Bus Chirp messaging services with type-specific configuration
+        /// </summary>
+        /// <param name="configureOptions">Action to configure Azure Service Bus options</param>
+        /// <returns>The service collection</returns>
+        public IServiceCollection AddChirp(Action<AzureServiceBusChirpOptions> configureOptions)
+        {
+            // Get IConfiguration from service descriptors directly
+            ServiceDescriptor? configDescriptor = services.FirstOrDefault(d =>
+                d.ServiceType == typeof(IConfiguration));
+
+            if (configDescriptor?.ImplementationInstance is IConfiguration configuration)
+            {
+                return services.AddChirp(configureOptions, configuration);
+            }
+
+            throw new InvalidOperationException(
+                "IConfiguration is not registered in the service collection. " +
+                "Please register IConfiguration before calling AddChirp or use the overload that accepts IConfiguration.");
+        }
+
+        /// <summary>
+        /// Adds Amazon SQS Chirp messaging services with type-specific configuration
+        /// </summary>
+        /// <param name="configureOptions">Action to configure Amazon SQS options</param>
+        /// <returns>The service collection</returns>
+        public IServiceCollection AddChirp(Action<AmazonSqsChirpOptions> configureOptions)
+        {
+            // Get IConfiguration from service descriptors directly
+            ServiceDescriptor? configDescriptor = services.FirstOrDefault(d =>
+                d.ServiceType == typeof(IConfiguration));
+
+            if (configDescriptor?.ImplementationInstance is IConfiguration configuration)
+            {
+                return services.AddChirp(configureOptions, configuration);
+            }
+
+            throw new InvalidOperationException(
+                "IConfiguration is not registered in the service collection. " +
+                "Please register IConfiguration before calling AddChirp or use the overload that accepts IConfiguration.");
+        }
+
+        /// <summary>
+        /// Adds Redis Chirp messaging services with type-specific configuration
+        /// </summary>
+        /// <param name="configureOptions">Action to configure Redis options</param>
+        /// <returns>The service collection</returns>
+        public IServiceCollection AddChirp(Action<RedisChirpOptions> configureOptions)
+        {
+            // Get IConfiguration from service descriptors directly
+            ServiceDescriptor? configDescriptor = services.FirstOrDefault(d =>
+                d.ServiceType == typeof(IConfiguration));
+
+            if (configDescriptor?.ImplementationInstance is IConfiguration configuration)
+            {
+                return services.AddChirp(configureOptions, configuration);
+            }
+
+            throw new InvalidOperationException(
+                "IConfiguration is not registered in the service collection. " +
+                "Please register IConfiguration before calling AddChirp or use the overload that accepts IConfiguration.");
+        }
+
+        /// <summary>
+        /// Adds Google Pub/Sub Chirp messaging services with type-specific configuration
+        /// </summary>
+        /// <param name="configureOptions">Action to configure Google Pub/Sub options</param>
+        /// <returns>The service collection</returns>
+        public IServiceCollection AddChirp(Action<GooglePubSubChirpOptions> configureOptions)
+        {
+            // Get IConfiguration from service descriptors directly
+            ServiceDescriptor? configDescriptor = services.FirstOrDefault(d =>
+                d.ServiceType == typeof(IConfiguration));
+
+            if (configDescriptor?.ImplementationInstance is IConfiguration configuration)
+            {
+                return services.AddChirp(configureOptions, configuration);
+            }
+
+            throw new InvalidOperationException(
+                "IConfiguration is not registered in the service collection. " +
+                "Please register IConfiguration before calling AddChirp or use the overload that accepts IConfiguration.");
+        }
+
+        /// <summary>
+        /// Adds NATS Chirp messaging services with type-specific configuration
+        /// </summary>
+        /// <param name="configureOptions">Action to configure NATS options</param>
+        /// <returns>The service collection</returns>
+        public IServiceCollection AddChirp(Action<NatsChirpOptions> configureOptions)
+        {
+            // Get IConfiguration from service descriptors directly
+            ServiceDescriptor? configDescriptor = services.FirstOrDefault(d =>
+                d.ServiceType == typeof(IConfiguration));
+
+            if (configDescriptor?.ImplementationInstance is IConfiguration configuration)
+            {
+                return services.AddChirp(configureOptions, configuration);
+            }
+
+            throw new InvalidOperationException(
+                "IConfiguration is not registered in the service collection. " +
+                "Please register IConfiguration before calling AddChirp or use the overload that accepts IConfiguration.");
+        }
     }
 
     /// <summary>
@@ -501,7 +438,10 @@ public static class DependencyInjection
         RedisChirpOptions => EventBusType.Redis,
         GooglePubSubChirpOptions => EventBusType.GooglePubSub,
         NatsChirpOptions => EventBusType.NATS,
-        _ => options.EventBusType
+        InMemoryOptions => EventBusType.InMemory,
+        
+        
+        _ => throw new ArgumentException($"Unsupported ChirpOptions type: {options.GetType().Name}")
     };
 
     /// <summary>
@@ -571,6 +511,8 @@ public static class DependencyInjection
 
             // Auto-subscribe all registered handlers
             AutoSubscribeEventHandlers(eventBus, options, sp);
+            
+            // Return the event bus instance
             return eventBus;
         });
 
@@ -609,12 +551,23 @@ public static class DependencyInjection
     {
         services.AddSingleton<IChirpRabbitMqConnection>(sp =>
         {
-            // Use options values if provided, otherwise fall back to configuration
-            string host = options?.Host ?? configuration["RMQ:Host"] ?? throw new ArgumentNullException("RMQ:Host configuration is missing");
-            string username = options?.Username ?? configuration["RMQ:Username"] ?? throw new ArgumentNullException("RMQ:Username configuration is missing");
-            string password = options?.Password ?? configuration["RMQ:Password"] ?? throw new ArgumentNullException("RMQ:Password configuration is missing");
-
-            IConnectionFactory connectionFactory = Domain.Common.ConnectionFactory.CreateConnectionFactory(host, username, password);
+            string host = options?.Host ?? configuration.GetValue<string>("RMQ:Host") ?? throw new ArgumentNullException("RMQ:Host configuration is missing");
+            int port = options.Port ?? configuration.GetValue<int>("RMQ:Port", 5672);
+            string username = options?.Username ?? configuration.GetValue<string>("RMQ:Username") ?? throw new ArgumentNullException("RMQ:Username configuration is missing");
+            string password = options?.Password ?? configuration.GetValue<string>("RMQ:Password") ?? throw new ArgumentNullException("RMQ:Password configuration is missing");
+            bool automaticRecoveryEnabled = options?.AutomaticRecoveryEnabled ?? configuration.GetValue<bool>("RMQ:AutomaticRecoveryEnabled", true);
+            bool topologyRecoveryEnabled = options?.TopologyRecoveryEnabled ?? configuration.GetValue<bool>("RMQ:TopologyRecoveryEnabled", true);
+            TimeSpan networkRecoveryInterval = options?.NetworkRecoveryInterval ?? configuration.GetValue<TimeSpan>("RMQ:NetworkRecoveryInterval", TimeSpan.FromSeconds(5));
+            TimeSpan requestedHeartbeat = options?.RequestedHeartbeat ?? configuration.GetValue<TimeSpan>("RMQ:RequestedHeartbeat", TimeSpan.FromSeconds(60));
+            
+            // Create a RabbitMQ connection using the connection factory
+            IConnectionFactory connectionFactory = Domain.Common.ConnectionFactory.CreateConnectionFactory
+            (
+                // Connection details
+                host, username, password, port, automaticRecoveryEnabled, topologyRecoveryEnabled, networkRecoveryInterval, requestedHeartbeat
+            );
+            
+            // Create a RabbitMQ connection based on the factory
             return new ChirpRabbitMqConnection(connectionFactory);
         });
 
@@ -640,9 +593,11 @@ public static class DependencyInjection
             // Find all interface implementations of IIntegrationEventHandler<T>
             foreach (Type implementedInterface in consumer.HandlerType.GetInterfaces())
             {
+                // Skip if the interface is not generic
                 if (!implementedInterface.IsGenericType)
                     continue;
 
+                // Check if the interface is IIntegrationEventHandler<T>
                 if (implementedInterface.GetGenericTypeDefinition() != typeof(IChirpIntegrationEventHandler<>))
                     continue;
 
@@ -651,6 +606,8 @@ public static class DependencyInjection
 
                 // Register the handler as IIntegrationEventHandler<TEvent>
                 Type handlerInterfaceType = typeof(IChirpIntegrationEventHandler<>).MakeGenericType(eventType);
+                
+                // Add the handler as a transient service so it can be resolved by the event bus
                 services.AddTransient(handlerInterfaceType, consumer.HandlerType);
             }
         }
@@ -664,7 +621,23 @@ public static class DependencyInjection
     /// <param name="serviceProvider">The service provider</param>
     private static void AutoSubscribeEventHandlers(IChirpEventBus eventBus, ChirpOptions options, IServiceProvider serviceProvider)
     {
-        if (options.Consumers.Count == 0) return;
+        // Check if there are any consumers to subscribe.
+        if (options.Consumers.Count == 0)
+        {
+            // Log a warning if there are no consumers to subscribe to.
+            Console.WriteLine("Warning: No consumers registered. Skipping auto-subscription.");
+            
+            return;
+        }
+        
+        // Check if we need to skip auto-subscription.
+        if (!options.AutoSubscribeConsumers)
+        {
+            // Log a warning if auto-subscription is disabled.
+            Console.WriteLine("Warning: Auto-subscription is disabled. Skipping auto-subscription.");
+
+            return;
+        }
 
         // Get the generic SubscribeAsync<T, TH>() method
         MethodInfo? subscribeAsyncMethod = typeof(IChirpEventBus).GetMethod("SubscribeAsync");

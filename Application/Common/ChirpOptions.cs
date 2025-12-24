@@ -1,7 +1,4 @@
-﻿using Chirp.Infrastructure.EventBus;
-
-
-namespace Chirp.Domain.Common;
+﻿namespace Chirp.Application.Common;
 
 /// <summary>
 /// Configuration options for Chirp event bus
@@ -11,7 +8,12 @@ public class ChirpOptions
     /// <summary>
     /// Type of event bus to use
     /// </summary>
-    public EventBusType EventBusType { get; set; } = EventBusType.RabbitMQ;
+    public EventBusType EventBusType { get; set; }
+    
+    /// <summary>
+    /// Whether to automatically subscribe to event handler types.
+    /// </summary>
+    public bool AutoSubscribeConsumers { get; set; } = true;
 
     /// <summary>
     /// Queue, topic, or channel name for the messaging service
@@ -34,13 +36,15 @@ public class ChirpOptions
     /// <typeparam name="THandler">The event handler type to register</typeparam>
     /// <returns>The ChirpOptions instance for fluent configuration</returns>
     public ChirpOptions AddConsumer<THandler>()
-        where THandler : class
+        where THandler : Chirp.Application.Interfaces.IIChirpIntegrationEventHandler
     {
+        // Don't register the same handler type twice'
         if (Consumers.Any(c => c.HandlerType == typeof(THandler)))
         {
             return this;
         }
 
+        // Register the handler type
         Consumers.Add(new ConsumerRegistration(typeof(THandler)));
         return this;
     }

@@ -1,3 +1,4 @@
+using Chirp.Application.Common;
 using Chirp.Application.Interfaces;
 using Chirp.Infrastructure.EventBus;
 using Chirp.Infrastructure.EventBus.Common;
@@ -77,7 +78,7 @@ public class EventBusFactoryTests
         mockConfiguration.Setup(c => c["RMQ:ExchangeNameDLX"]).Returns("test_dlx_exchange");
 
         // Act
-        var eventBus = EventBusFactory.Create(
+        IChirpEventBus eventBus = EventBusFactory.Create(
             EventBusType.RabbitMQ,
             serviceProvider,
             mockConfiguration.Object,
