@@ -7,7 +7,7 @@ public interface IChirpEventBus
     /// <summary>
     /// </summary>
     /// <param name="event"></param>
-    public Task PublishAsync(IntegrationEvent @event, CancellationToken cancellationToken = default);
+    public Task<bool> PublishAsync(IntegrationEvent @event, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// </summary>

@@ -15,7 +15,6 @@ namespace Chirp.Infrastructure.EventBus.RabbitMQ;
 public class ChirpRabbitMqEventBus : EventBusBase, IAsyncDisposable
 {
     private const string BrokerName = "chirp_event_bus";
-
     private readonly IChirpRabbitMqConnection _rabbitMQConnection;
     private readonly string _queueName;
     private readonly string _dlxQueueName;
@@ -73,38 +72,55 @@ public class ChirpRabbitMqEventBus : EventBusBase, IAsyncDisposable
     /// Publishes an event to RabbitMQ
     /// </summary>
     /// <param name="event">The event to publish</param>
-    public override async Task PublishAsync(IntegrationEvent @event, CancellationToken cancellationToken = default)
+    public override async Task<bool> PublishAsync(IntegrationEvent @event, CancellationToken cancellationToken = default)
     {
-        // Ensure infrastructure is initialized
-        await EnsureInfrastructureInitializedAsync(cancellationToken);
-
-        // Ensure we are connected
-        if (!_rabbitMQConnection.IsConnected) 
+        try
         {
-            // Try to connect
-            await _rabbitMQConnection.TryConnectAsync(cancellationToken);
+            // Ensure infrastructure is initialized
+            await EnsureInfrastructureInitializedAsync(cancellationToken);
+
+            // Ensure we are connected
+            if (!_rabbitMQConnection.IsConnected) 
+            {
+                // Try to connect
+                await _rabbitMQConnection.TryConnectAsync(cancellationToken);
+            }
+
+            // Create a channel
+            await using IChannel channel = await _rabbitMQConnection.CreateChannelAsync(cancellationToken);
+
+            // Declare exchange (idempotent)
+            await channel.ExchangeDeclareAsync(ExchangeName, ExchangeType.Direct, true, cancellationToken: cancellationToken);
+
+            // Create message properties
+            BasicProperties properties = new BasicProperties { DeliveryMode = DeliveryModes.Persistent };
+
+            // Serialize event to JSON
+            byte[] payload = JsonSerializer.SerializeToUtf8Bytes(@event, @event.GetType(), _jsonOptions);
+
+            // Publish the event
+            await channel.BasicPublishAsync(
+                exchange: ExchangeName, 
+                routingKey: @event.GetType().Name, 
+                mandatory: false, 
+                basicProperties: properties, 
+                body: payload, 
+                cancellationToken: cancellationToken);
+            
+            // Log published event.
+            return true;
         }
+        catch (InvalidOperationException e)
+        {
+            // Log the error.
+            Console.WriteLine(e);
+            
+            // Swallow the exception as the users application should not fail due to event bus issues.
+            
+            // TODO: Create a Global Error Event Handler So The User Can Handle Event Bus Errors.
 
-        // Create a channel
-        using IChannel channel = await _rabbitMQConnection.CreateChannelAsync(cancellationToken);
-
-        // Declare exchange (idempotent)
-        await channel.ExchangeDeclareAsync(ExchangeName, ExchangeType.Direct, true, cancellationToken: cancellationToken);
-
-        // Create message properties
-        BasicProperties properties = new BasicProperties { DeliveryMode = DeliveryModes.Persistent };
-
-        // Serialize event to JSON
-        byte[] payload = JsonSerializer.SerializeToUtf8Bytes(@event, @event.GetType(), _jsonOptions);
-
-        // Publish the event
-        await channel.BasicPublishAsync(
-            exchange: ExchangeName, 
-            routingKey: @event.GetType().Name, 
-            mandatory: false, 
-            basicProperties: properties, 
-            body: payload, 
-            cancellationToken: cancellationToken);
+            return false;
+        }
     }
 
     /// <summary>
@@ -127,7 +143,7 @@ public class ChirpRabbitMqEventBus : EventBusBase, IAsyncDisposable
             Console.WriteLine($"Attempting to subscribe {typeof(TH).Name} to {eventName}");
 
             // Bind queue to exchange for this event type
-            using (IChannel channel = await _rabbitMQConnection.CreateChannelAsync(cancellationToken))
+            await using (IChannel channel = await _rabbitMQConnection.CreateChannelAsync(cancellationToken))
             {
                 // Attempt to bind the queue.
                 await channel.QueueBindAsync(_queueName, ExchangeName, eventName, cancellationToken: cancellationToken);
@@ -167,9 +183,9 @@ public class ChirpRabbitMqEventBus : EventBusBase, IAsyncDisposable
             _consumerChannel.CallbackExceptionAsync += OnConsumerChannelException;
 
             // Setup Dead Letter Exchange (DLX) and Queue
-            using (IChannel channel = await _rabbitMQConnection.CreateChannelAsync(cancellationToken))
+            await using (IChannel channel = await _rabbitMQConnection.CreateChannelAsync(cancellationToken))
             {
-                // Declare main exchange
+                // Declare a main exchange
                 await channel.ExchangeDeclareAsync(ExchangeName, ExchangeType.Direct, true, cancellationToken: cancellationToken);
 
                 // Declare main queue with DLX settings
@@ -200,11 +216,11 @@ public class ChirpRabbitMqEventBus : EventBusBase, IAsyncDisposable
         // Check if consumer already started
         if (_isConsumerStarted) return;
 
-        // Acquire lock to start consumer
+        // Acquire lock to start a consumer
         await _infrastructureLock.WaitAsync(cancellationToken);
         try
         {
-            // Double-check if consumer started after acquiring lock
+            // Double-check if a consumer started after acquiring lock
             if (_isConsumerStarted) return;
 
             // Ensure consumer channel is available
@@ -256,11 +272,11 @@ public class ChirpRabbitMqEventBus : EventBusBase, IAsyncDisposable
         // Extract headers (retry count, original event name)
         if (eventArgs.BasicProperties.Headers != null)
         {
-            // Get original event name if present
+            // Get an original event name if present
             if (eventArgs.BasicProperties.Headers.TryGetValue("x-chirp-event", 
                 out object? nameBytes) && nameBytes is byte[] bytes)
             {
-                // Override event name from header
+                // Override event name from a header
                 eventName = Encoding.UTF8.GetString(bytes);
             }
 
@@ -306,6 +322,7 @@ public class ChirpRabbitMqEventBus : EventBusBase, IAsyncDisposable
             // Simple backoff
             await Task.Delay(TimeSpan.FromSeconds(Math.Min(30, retryCount + 1)));
 
+            // Publish back to the queue
             await _consumerChannel!.BasicPublishAsync(
                 exchange: ExchangeName,
                 routingKey: eventName, 
@@ -313,6 +330,7 @@ public class ChirpRabbitMqEventBus : EventBusBase, IAsyncDisposable
                 basicProperties: properties, 
                 body: eventArgs.Body.ToArray());
 
+            // Acknowledge the message
             await _consumerChannel.BasicAckAsync(eventArgs.DeliveryTag, false);
         }
         else
@@ -329,9 +347,11 @@ public class ChirpRabbitMqEventBus : EventBusBase, IAsyncDisposable
                 }
             };
 
-            // We need a channel to publish to DLX (can use consumer channel or new one)
+            // We need a channel to publish to DLX (can use a consumer channel or new one)
             // Using a new one is safer to avoid blocking consumer
-            using IChannel channel = await _rabbitMQConnection.CreateChannelAsync();
+            await using IChannel channel = await _rabbitMQConnection.CreateChannelAsync();
+            
+            // Publish to DLX
             await channel.BasicPublishAsync(
                 exchange: DlxExchangeName,
                 routingKey: _dlxQueueName,
@@ -339,6 +359,7 @@ public class ChirpRabbitMqEventBus : EventBusBase, IAsyncDisposable
                 basicProperties: properties,
                 body: eventArgs.Body.ToArray());
 
+            // Acknowledge the message
             await _consumerChannel!.BasicAckAsync(eventArgs.DeliveryTag, false);
         }
     }
@@ -397,14 +418,13 @@ public class ChirpRabbitMqEventBus : EventBusBase, IAsyncDisposable
             MethodInfo? method = concreteType.GetMethod("Handle");
 
             // If method not found, skip
-            if (method != null)
-            {
-                // Invoke the handler
-                await (Task)method.Invoke(handler, [integrationEvent])!;
+            if (method == null) continue;
+            
+            // Invoke the handler
+            await (Task)method.Invoke(handler, [integrationEvent])!;
 
-                // Mark as handled
-                anyHandled = true;
-            }
+            // Mark as handled
+            anyHandled = true;
         }
 
         // Return whether any handler processed the event
@@ -445,6 +465,7 @@ public class ChirpRabbitMqEventBus : EventBusBase, IAsyncDisposable
     /// </summary>
     public async ValueTask DisposeAsync()
     {
+        // Dispose infrastructure
         if (_consumerChannel != null)
         {
             if (_consumerChannel.IsOpen)

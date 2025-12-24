@@ -40,7 +40,7 @@ public class NATSEventBus(
     /// Publishes an event to NATS
     /// </summary>
     /// <param name="event">The event to publish</param>
-    public override Task PublishAsync(IntegrationEvent @event, CancellationToken cancellationToken = default)
+    public override Task<bool> PublishAsync(IntegrationEvent @event, CancellationToken cancellationToken = default)
     {
         throw new NotImplementedException();
     }
