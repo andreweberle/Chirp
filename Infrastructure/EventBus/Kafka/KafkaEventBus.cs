@@ -36,7 +36,7 @@ public class KafkaEventBus : EventBusBase
         IChirpEventBusSubscriptionsManager eventBusSubscriptionsManager,
         string topic,
         int retryMax = 5)
-        : base(eventBusSubscriptionsManager, serviceProvider)
+        : base(retryMax, eventBusSubscriptionsManager, serviceProvider)
     {
         _kafkaConnection = kafkaConnection ?? throw new ArgumentNullException(nameof(kafkaConnection));
         _topic = topic ?? throw new ArgumentNullException(nameof(topic));
