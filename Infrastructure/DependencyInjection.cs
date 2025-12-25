@@ -81,6 +81,15 @@ public static class DependencyInjection
             // Register event bus using options
             services = services.AddEventBus(null, options);
             
+            services.AddSingleton<Channel<IntegrationEvent>>(
+                _ => Channel.CreateUnbounded<IntegrationEvent>(new UnboundedChannelOptions()
+                {
+                    SingleReader = true,
+                    SingleWriter = false,
+                    AllowSynchronousContinuations = false
+                }));
+            
+            // Return the service collection
             return services;
         }
         
@@ -452,9 +461,7 @@ public static class DependencyInjection
         GooglePubSubChirpOptions => EventBusType.GooglePubSub,
         NatsChirpOptions => EventBusType.NATS,
         InMemoryOptions => EventBusType.InMemory,
-        
-        
-        _ => throw new ArgumentException($"Unsupported ChirpOptions type: {options.GetType().Name}")
+        _ => options.EventBusType
     };
 
     /// <summary>
@@ -554,49 +561,49 @@ public static class DependencyInjection
             configuration);
     }
 
-    public static IServiceCollection AddInMemoryEventBusConnection(this IServiceCollection services,
-        InMemoryOptions? options = null)
-    {
-        // Register the event bus using the factory
-        services.AddHostedService<InMemoryProcessor>();
-        return services;
-    }
-
-    /// <summary>
-    /// Registers the RabbitMQ connection
-    /// </summary>
     /// <param name="services">The service collection</param>
-    /// <param name="configuration">The configuration</param>
-    /// <param name="options">Optional RabbitMQ options that may contain connection details</param>
-    /// <exception cref="ArgumentNullException"></exception>
-    private static IServiceCollection AddRabbitMqConnection(
-        this IServiceCollection services,
-        IConfiguration configuration,
-        RabbitMqChirpOptions? options = null)
+    extension(IServiceCollection services)
     {
-        services.AddSingleton<IChirpRabbitMqConnection>(sp =>
+        public IServiceCollection AddInMemoryEventBusConnection(InMemoryOptions? options = null)
         {
-            string host = options?.Host ?? configuration.GetValue<string>("RMQ:Host") ?? throw new ArgumentNullException("RMQ:Host configuration is missing");
-            int port = options.Port ?? configuration.GetValue<int>("RMQ:Port", 5672);
-            string username = options?.Username ?? configuration.GetValue<string>("RMQ:Username") ?? throw new ArgumentNullException("RMQ:Username configuration is missing");
-            string password = options?.Password ?? configuration.GetValue<string>("RMQ:Password") ?? throw new ArgumentNullException("RMQ:Password configuration is missing");
-            bool automaticRecoveryEnabled = options?.AutomaticRecoveryEnabled ?? configuration.GetValue<bool>("RMQ:AutomaticRecoveryEnabled", true);
-            bool topologyRecoveryEnabled = options?.TopologyRecoveryEnabled ?? configuration.GetValue<bool>("RMQ:TopologyRecoveryEnabled", true);
-            TimeSpan networkRecoveryInterval = options?.NetworkRecoveryInterval ?? configuration.GetValue<TimeSpan>("RMQ:NetworkRecoveryInterval", TimeSpan.FromSeconds(5));
-            TimeSpan requestedHeartbeat = options?.RequestedHeartbeat ?? configuration.GetValue<TimeSpan>("RMQ:RequestedHeartbeat", TimeSpan.FromSeconds(60));
-            
-            // Create a RabbitMQ connection using the connection factory
-            IConnectionFactory connectionFactory = Domain.Common.ConnectionFactory.CreateConnectionFactory
-            (
-                // Connection details
-                host, username, password, port, automaticRecoveryEnabled, topologyRecoveryEnabled, networkRecoveryInterval, requestedHeartbeat
-            );
-            
-            // Create a RabbitMQ connection based on the factory
-            return new ChirpRabbitMqConnection(connectionFactory);
-        });
+            // Register the background processor, this will be used to process events.
+            services.AddHostedService<ChirpInMemoryProcessor>();
+            return services;
+        }
 
-        return services;
+        /// <summary>
+        /// Registers the RabbitMQ connection
+        /// </summary>
+        /// <param name="configuration">The configuration</param>
+        /// <param name="options">Optional RabbitMQ options that may contain connection details</param>
+        /// <exception cref="ArgumentNullException"></exception>
+        private IServiceCollection AddRabbitMqConnection(IConfiguration configuration,
+            RabbitMqChirpOptions? options = null)
+        {
+            services.AddSingleton<IChirpRabbitMqConnection>(sp =>
+            {
+                string host = options?.Host ?? configuration.GetValue<string>("RMQ:Host") ?? throw new ArgumentNullException("RMQ:Host configuration is missing");
+                int port = options.Port ?? configuration.GetValue<int>("RMQ:Port", 5672);
+                string username = options?.Username ?? configuration.GetValue<string>("RMQ:Username") ?? throw new ArgumentNullException("RMQ:Username configuration is missing");
+                string password = options?.Password ?? configuration.GetValue<string>("RMQ:Password") ?? throw new ArgumentNullException("RMQ:Password configuration is missing");
+                bool automaticRecoveryEnabled = options?.AutomaticRecoveryEnabled ?? configuration.GetValue<bool>("RMQ:AutomaticRecoveryEnabled", true);
+                bool topologyRecoveryEnabled = options?.TopologyRecoveryEnabled ?? configuration.GetValue<bool>("RMQ:TopologyRecoveryEnabled", true);
+                TimeSpan networkRecoveryInterval = options?.NetworkRecoveryInterval ?? configuration.GetValue<TimeSpan>("RMQ:NetworkRecoveryInterval", TimeSpan.FromSeconds(5));
+                TimeSpan requestedHeartbeat = options?.RequestedHeartbeat ?? configuration.GetValue<TimeSpan>("RMQ:RequestedHeartbeat", TimeSpan.FromSeconds(60));
+            
+                // Create a RabbitMQ connection using the connection factory
+                IConnectionFactory connectionFactory = Domain.Common.ConnectionFactory.CreateConnectionFactory
+                (
+                    // Connection details
+                    host, username, password, port, automaticRecoveryEnabled, topologyRecoveryEnabled, networkRecoveryInterval, requestedHeartbeat
+                );
+            
+                // Create a RabbitMQ connection based on the factory
+                return new ChirpRabbitMqConnection(connectionFactory);
+            });
+
+            return services;
+        }
     }
 
     /// <summary>

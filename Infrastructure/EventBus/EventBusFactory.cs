@@ -1,3 +1,4 @@
+using System.Threading.Channels;
 using Chirp.Application.Common;
 using Chirp.Application.Common.EventBusOptions;
 using Chirp.Application.Interfaces;
@@ -109,7 +110,14 @@ public static class EventBusFactory
         IServiceProvider serviceProvider, 
         IChirpEventBusSubscriptionsManager subscriptionsManager)
     {
-        return new InMemoryEventBus(subscriptionsManager, serviceProvider);
+        const string queueName = "chirp_in_memory_event_bus";
+        const string exchangeName = "chirp_in_memory_event_bus_exchange";
+        const string dlxExchangeName = "chirp_in_memory_event_bus_dlx_exchange";
+        const int retryCount = 5;
+        
+        // Create the in-memory event bus
+        return new ChirpInMemoryEventBus(subscriptionsManager, serviceProvider, queueName, retryCount, exchangeName,
+            dlxExchangeName);
     }
 
     private static ChirpRabbitMqEventBus CreateRabbitMQEventBus(

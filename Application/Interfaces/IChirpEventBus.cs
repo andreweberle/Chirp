@@ -16,4 +16,6 @@ public interface IChirpEventBus
     public Task SubscribeAsync<T, TH>(CancellationToken cancellationToken = default)
         where T : IntegrationEvent
         where TH : IChirpIntegrationEventHandler<T>;
+
+    public Task<bool> ProcessHandlers(string eventName, string message, CancellationToken cancellationToken = default);
 }

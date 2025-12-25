@@ -366,69 +366,8 @@ public class ChirpRabbitMqEventBus : EventBusBase, IAsyncDisposable
 
     private async Task ProcessEvent(string eventName, string message)
     {
-        // Check if there are subscriptions for this event
-        if (!SubscriptionsManager.HasSubscriptionsForEvent(eventName))
-        {
-            Console.WriteLine($"No subscription for event: {eventName}");
-            return;
-        }
-
-        // Get all handlers for this event, There could be multiple.
-        IEnumerable<SubscriptionInfo> subscriptions = SubscriptionsManager.GetHandlersForEvent(eventName);
-       
-        // Always create a scope to resolve handlers.
-        // This supports Scoped services (like DbContext) and avoids scope validation errors
-        // when trying to resolve scoped services from the root provider.
-        await using AsyncServiceScope scope = ServiceProvider.CreateAsyncScope();
-
         // Process each handler
-        await ProcessHandlers(subscriptions, scope.ServiceProvider, eventName, message);
-    }
-
-    private async Task<bool> ProcessHandlers(IEnumerable<SubscriptionInfo> subscriptions, IServiceProvider provider, string eventName, string message)
-    {
-        // Get the event type
-        bool anyHandled = false;
-
-        // Get the event type
-        Type? eventType = SubscriptionsManager.GetEventTypeByName(eventName);
-
-        // Check if event type found
-        if (eventType == null) return false;
-
-        // Deserialize the event
-        object? integrationEvent = JsonSerializer.Deserialize(message, eventType, _jsonOptions);
-
-        // Check if deserialization succeeded
-        if (integrationEvent == null) return false;
-
-        // Process each subscription
-        foreach (SubscriptionInfo subscription in subscriptions)
-        {
-            // Resolve the handler
-            object? handler = provider.GetService(subscription.HandlerType);
-
-            // If handler not found, skip
-            if (handler == null) continue;
-
-            // Create the concrete handler type
-            Type concreteType = typeof(IChirpIntegrationEventHandler<>).MakeGenericType(eventType);
-
-            // Get the Handle method
-            MethodInfo? method = concreteType.GetMethod("Handle");
-
-            // If method not found, skip
-            if (method == null) continue;
-            
-            // Invoke the handler
-            await (Task)method.Invoke(handler, [integrationEvent])!;
-
-            // Mark as handled
-            anyHandled = true;
-        }
-
-        // Return whether any handler processed the event
-        return anyHandled;
+        await ProcessHandlers(eventName, message);
     }
 
     private async Task OnConsumerChannelException(object sender, CallbackExceptionEventArgs e)
