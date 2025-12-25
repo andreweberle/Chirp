@@ -13,10 +13,10 @@ public class ChirpInMemoryEventBus(
     int retryMax = 5,
     string exchangeName = ChirpInMemoryEventBus.BrokerName,
     string dlxExchangeName = "_dlxExchangeName")
-    : EventBusBase(subscriptionsManager, serviceProvider)
+    : EventBusBase(retryMax, subscriptionsManager, serviceProvider)
 {
-    private string ExchangeName { get; } = exchangeName;
-    private string DlxExchangeName { get; } = dlxExchangeName;
+    private readonly string _exchangeName = exchangeName;
+    private readonly string _dlxExchangeName = dlxExchangeName;
 
     private static readonly JsonSerializerOptions _jsonOptions = new()
     {
@@ -29,9 +29,8 @@ public class ChirpInMemoryEventBus(
     private const string BrokerName = "chirp_event_bus";
     private readonly string _queueName = queueName;
     private readonly string _dlxQueueName = $"{queueName}_dlx";
-    private readonly int _retryMax = retryMax;
+    public int RetryCount { get; } = retryMax;
     
-    private readonly Channel<IntegrationEvent> _channel = Channel.CreateUnbounded<IntegrationEvent>();
     private readonly IChirpEventBusSubscriptionsManager _subscriptionsManager = subscriptionsManager;
     private readonly IServiceProvider _serviceProvider = serviceProvider;
     
@@ -41,8 +40,17 @@ public class ChirpInMemoryEventBus(
     {
         try
         {
+            // Get the channel
+            Channel<IntegrationEvent> channel = serviceProvider.GetRequiredService<Channel<IntegrationEvent>>();
+            
+            // Check if the channel is null
+            if (channel == null)
+            {
+                throw new InvalidOperationException("Channel is null. Ensure the channel is properly initialized.");
+            }
+            
             // Publish the event
-            await _channel.Writer.WriteAsync(@event, cancellationToken);
+            await channel.Writer.WriteAsync(@event, cancellationToken);
             
             // Log published event.
             return true;

@@ -15,7 +15,7 @@ public class ChirpBackgroundWorker(
         while (!stoppingToken.IsCancellationRequested)
         {
             // Wait for a random amount of time between 1 and 30 seconds
-            await Task.Delay(TimeSpan.FromSeconds(Random.Shared.Next(1, 3)), stoppingToken);
+            await Task.Delay(TimeSpan.FromSeconds(Random.Shared.Next(1, 30)), stoppingToken);
 
             // Check if we have logging enabled
             if (_logger.IsEnabled(LogLevel.Information))

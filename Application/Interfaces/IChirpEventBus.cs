@@ -4,6 +4,8 @@ namespace Chirp.Application.Interfaces;
 
 public interface IChirpEventBus
 {
+    public int RetryMax { get; }
+
     /// <summary>
     /// </summary>
     /// <param name="event"></param>
