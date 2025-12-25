@@ -9,6 +9,7 @@ using Chirp.Infrastructure.EventBus.AzureServiceBus;
 using Chirp.Infrastructure.EventBus.AmazonSQS;
 using Chirp.Infrastructure.EventBus.Redis;
 using Chirp.Infrastructure.EventBus.GooglePubSub;
+using Chirp.Infrastructure.EventBus.InMemory;
 using Chirp.Infrastructure.EventBus.NATS;
 using Microsoft.Extensions.Configuration;
 
@@ -34,67 +35,20 @@ public static class EventBusFactory
         // Create a subscription manager to be used by the event bus
         IChirpEventBusSubscriptionsManager subscriptionsManager = new InMemoryEventBusSubscriptionsManager();
 
-        // Handle different types of options
-        if (options is RabbitMqChirpOptions rabbitOptions)
+        return options switch
         {
-            return CreateRabbitMQEventBus(
-                serviceProvider,
-                subscriptionsManager,
-                rabbitOptions);
-        }
-        else if (options is KafkaChirpOptions kafkaOptions)
-        {
-            return CreateKafkaEventBus(
-                serviceProvider,
-                subscriptionsManager,
-                kafkaOptions);
-        }
-        else if (options is AzureServiceBusChirpOptions azureOptions)
-        {
-            return CreateAzureServiceBusEventBus(
-                serviceProvider,
-                subscriptionsManager,
-                azureOptions);
-        }
-        else if (options is AmazonSqsChirpOptions sqsOptions)
-        {
-            return CreateAmazonSQSEventBus(
-                serviceProvider,
-                subscriptionsManager,
-                configuration,
-                sqsOptions);
-        }
-        else if (options is RedisChirpOptions redisOptions)
-        {
-            return CreateRedisEventBus(
-                serviceProvider,
-                subscriptionsManager,
-                redisOptions);
-        }
-        else if (options is GooglePubSubChirpOptions googleOptions)
-        {
-            return CreateGooglePubSubEventBus(
-                serviceProvider,
-                subscriptionsManager,
-                googleOptions);
-        }
-        else if (options is NatsChirpOptions natsOptions)
-        {
-            return CreateNATSEventBus(
-                serviceProvider,
-                subscriptionsManager,
-                natsOptions);
-        }
-        else
-        {
-            // Fallback to using EventBusType for the base class
-            return Create(
-                options.EventBusType,
-                serviceProvider,
-                configuration,
-                options.QueueName,
-                options.RetryCount);
-        }
+            // Handle different types of options
+            InMemoryOptions => CreateInMemoryEventBus(serviceProvider, subscriptionsManager),
+            RabbitMqChirpOptions rabbitOptions => CreateRabbitMQEventBus(serviceProvider, subscriptionsManager, rabbitOptions),
+            KafkaChirpOptions kafkaOptions => CreateKafkaEventBus(serviceProvider, subscriptionsManager, kafkaOptions),
+            AzureServiceBusChirpOptions azureOptions => CreateAzureServiceBusEventBus(serviceProvider, subscriptionsManager, azureOptions),
+            AmazonSqsChirpOptions sqsOptions => CreateAmazonSQSEventBus(serviceProvider, subscriptionsManager, configuration, sqsOptions),
+            RedisChirpOptions redisOptions => CreateRedisEventBus(serviceProvider, subscriptionsManager, redisOptions),
+            GooglePubSubChirpOptions googleOptions => CreateGooglePubSubEventBus(serviceProvider, subscriptionsManager, googleOptions),
+            NatsChirpOptions natsOptions => CreateNATSEventBus(serviceProvider, subscriptionsManager, natsOptions),
+            
+            _ => Create(options.EventBusType, serviceProvider, configuration, options.QueueName, options.RetryCount)
+        };
     }
 
     /// <summary>
@@ -118,8 +72,9 @@ public static class EventBusFactory
 
         return eventBusType switch
         {
-            EventBusType.InMemory => throw new NotImplementedException(
-                "In-memory event bus is not implemented yet."),
+            EventBusType.InMemory => CreateInMemoryEventBus(
+                serviceProvider,
+                subscriptionsManager),
             
             EventBusType.RabbitMQ => CreateRabbitMQEventBus(
                 serviceProvider,
@@ -148,6 +103,13 @@ public static class EventBusFactory
 
             _ => throw new ArgumentException($"Unsupported event bus type: {eventBusType}")
         };
+    }
+
+    private static IChirpEventBus CreateInMemoryEventBus(
+        IServiceProvider serviceProvider, 
+        IChirpEventBusSubscriptionsManager subscriptionsManager)
+    {
+        return new InMemoryEventBus(subscriptionsManager, serviceProvider);
     }
 
     private static ChirpRabbitMqEventBus CreateRabbitMQEventBus(

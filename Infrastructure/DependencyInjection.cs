@@ -5,7 +5,9 @@ using Chirp.Infrastructure.EventBus;
 using Chirp.Infrastructure.EventBus.RabbitMQ;
 using RabbitMQ.Client;
 using System.Reflection;
+using System.Threading.Channels;
 using Chirp.Application.Common;
+using Chirp.Infrastructure.EventBus.InMemory;
 
 namespace Chirp.Infrastructure;
 
@@ -68,14 +70,28 @@ public static class DependencyInjection
     /// <param name="services">The service collection</param>
     extension(IServiceCollection services)
     {
+        public IServiceCollection AddChirp(Action<InMemoryOptions> configureOptions)
+        {
+            InMemoryOptions options = new InMemoryOptions();
+            configureOptions(options);
+
+            // Register consumers first so they're available when the event bus is created
+            RegisterConsumers(services, options);
+
+            // Register event bus using options
+            services = services.AddEventBus(null, options);
+            
+            return services;
+        }
+        
+        
         /// <summary>
         /// Adds Chirp messaging services to the service collection with a fluent configuration API
         /// </summary>
         /// <param name="configureOptions">Action to configure options</param>
         /// <param name="configuration">The configuration (required)</param>
         /// <returns>The service collection</returns>
-        public IServiceCollection AddChirp(Action<ChirpOptions> configureOptions,
-            IConfiguration configuration)
+        public IServiceCollection AddChirp(Action<ChirpOptions> configureOptions, IConfiguration configuration)
         {
             ArgumentNullException.ThrowIfNull(configuration);
             ChirpOptions options = new();
@@ -85,10 +101,7 @@ public static class DependencyInjection
             RegisterConsumers(services, options);
 
             // Register event bus using options
-            services = AddEventBus(
-                services,
-                configuration,
-                options);
+            services = services.AddEventBus(configuration, options);
 
             return services;
         }
@@ -453,7 +466,7 @@ public static class DependencyInjection
     /// <returns>The service collection</returns>
     private static IServiceCollection AddEventBus(
         this IServiceCollection services,
-        IConfiguration configuration,
+        IConfiguration? configuration,
         ChirpOptions options)
     {
         // Determine the event bus type from options
@@ -462,6 +475,10 @@ public static class DependencyInjection
         // Register necessary connections based on event bus type
         switch (eventBusType)
         {
+            case EventBusType.InMemory:
+                services.AddInMemoryEventBusConnection(options as InMemoryOptions);
+                break;
+            
             case EventBusType.RabbitMQ:
                 services.AddRabbitMqConnection(configuration, options as RabbitMqChirpOptions);
                 break;
@@ -535,6 +552,14 @@ public static class DependencyInjection
             options,
             serviceProvider,
             configuration);
+    }
+
+    public static IServiceCollection AddInMemoryEventBusConnection(this IServiceCollection services,
+        InMemoryOptions? options = null)
+    {
+        // Register the event bus using the factory
+        services.AddHostedService<InMemoryProcessor>();
+        return services;
     }
 
     /// <summary>
@@ -677,12 +702,10 @@ public static class DependencyInjection
                 try
                 {
                     // Bind generic type arguments to SubscribeAsync<TEvent, THandler>
-                    MethodInfo closedSubscribeMethod =
-                        subscribeAsyncMethod.MakeGenericMethod(eventType, handlerType);
+                    MethodInfo closedSubscribeMethod = subscribeAsyncMethod.MakeGenericMethod(eventType, handlerType);
 
                     // Invoke SubscribeAsync on the event bus
-                    object? returnValue =
-                        closedSubscribeMethod.Invoke(eventBus, [CancellationToken.None]);
+                    object? returnValue = closedSubscribeMethod.Invoke(eventBus, [CancellationToken.None]);
 
                     // Await the subscription to ensure sequential registration
                     if (returnValue is Task subscriptionTask)
