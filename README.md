@@ -16,7 +16,7 @@ various message brokers, including `RabbitMQ`, with planned support for `Kafka`,
 - **Automatic handler registration and subscription**
 - **Strongly-typed configuration options** for each message broker
 - **Message retries** with configurable retry counts
-- **Dead letter exchange/queue** support for failed messages
+- **Dead letter exchange/queue** support for failed messages (RabbitMQ & InMemory)
 - **Clean subscription management** with in-memory event tracking
 - **Support for multiple message brokers**:
     - RabbitMQ (✅ fully implemented)
@@ -73,12 +73,12 @@ services.AddChirp(options =>
 });
 ```
 
-### Using Strongly Typed Options
+#### Using Strongly Typed Options
 
 Chirp supports strongly typed configuration options for each message broker implementation. This provides better
 IntelliSense and type safety:
 
-#### RabbitMQ Configuration
+##### RabbitMQ Configuration
 
 ```csharp
 using Chirp.Application.Common.EventBusOptions;
@@ -102,6 +102,26 @@ services.AddChirp(options =>
     options.AddConsumer<PaymentReceivedEventHandler>();
 });
 ```
+
+##### InMemory Configuration (Testing/Development)
+
+```csharp
+using Chirp.Application.Common.EventBusOptions;
+using Chirp.Infrastructure;
+
+// Add Chirp services with InMemory provider
+services.AddChirp(options => 
+{
+    // Configure InMemory options
+    options.QueueName = "my_memory_queue";
+    options.RetryCount = 3;
+    
+    // Register event handlers
+    options.AddConsumer<OrderCreatedEventHandler>();
+});
+```
+
+> **Note:** The InMemory provider includes a Dead Letter Queue for failed messages. We are currently developing an API to retrieve, inspect, and replay these messages programmatically.
 
 #### Future Provider Configuration Examples
 

@@ -10,6 +10,7 @@ namespace Chirp.Infrastructure.EventBus;
 /// Abstract base class for event bus implementations to share common functionality
 /// </summary>
 public abstract class EventBusBase(
+    int retryMax,
     IChirpEventBusSubscriptionsManager subscriptionsManager,
     IServiceProvider serviceProvider)
     : IChirpEventBus
@@ -26,7 +27,9 @@ public abstract class EventBusBase(
         WriteIndented = true,
         ReferenceHandler = ReferenceHandler.Preserve,
         PropertyNameCaseInsensitive = true
-    };  
+    };
+
+    public int RetryMax { get; } = retryMax;
 
     /// <summary>
     /// Publishes an event to the event bus

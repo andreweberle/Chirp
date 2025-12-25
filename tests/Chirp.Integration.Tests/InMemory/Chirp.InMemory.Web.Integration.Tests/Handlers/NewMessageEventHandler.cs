@@ -16,7 +16,11 @@ public class NewMessageEventHandler(ILogger<NewMessageEventHandler> logger) : IC
             _logger.LogInformation("Received event: {@Event}", @event);
         }
 
-        // Simulate a long running with random delay
-        await Task.Delay(TimeSpan.FromSeconds(new Random().Next(1, 10)));
+        // Simulate a random exception, we will use this to test error handling.
+        // 1 in 3 chance of throwing an exception.
+        if (new Random().Next(1, 3) == 1)
+        {
+            throw new Exception("Test exception");
+        }
     }
 }

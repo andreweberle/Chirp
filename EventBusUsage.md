@@ -248,6 +248,60 @@ services.AddChirp(options =>
 
 When disabled, you must manually subscribe handlers using `eventBus.SubscribeAsync<T, TH>()`.
 
+## InMemory Dead Letter Queue
+
+When using the `InMemory` provider, messages that fail to process after the configured number of retries are moved to an internal Dead Letter Queue (DLQ). This ensures that failed messages are not lost and can be inspected for debugging purposes.
+
+### How it works
+
+1. **Retries**: If an event handler throws an exception, the event is retried up to the configured `RetryCount`.
+2. **Failure**: If all retries fail, the event is wrapped in a `ChirpInMemoryDeadLetterEnvelope` (containing the event, the exception, and metadata) and moved to the DLQ.
+3. **Storage**: The event remains in the in-memory DLQ and is no longer processed by the background worker.
+
+### Accessing Dead Letters in Tests
+
+You can inspect the DLQ by resolving `IChirpInMemoryDeadLetterQueue` from the service provider. This is ideal for integration tests where you want to verify that invalid messages are correctly rejected.
+
+```csharp
+[TestMethod]
+public async Task BadMessage_GoesToDeadLetterQueue()
+{
+    // Arrange
+    var services = new ServiceCollection();
+    services.AddChirp(options =>
+    {
+        options.EventBusType = EventBusType.InMemory;
+        options.RetryCount = 2;
+        options.AddConsumer<FaultyEventHandler>();
+    });
+    
+    var sp = services.BuildServiceProvider();
+    var bus = sp.GetRequiredService<IChirpEventBus>();
+    var dlq = sp.GetRequiredService<IChirpInMemoryDeadLetterQueue>();
+
+    // Act
+    await bus.PublishAsync(new OrderCreatedEvent(1, "Bad Order", 0));
+    
+    // Allow time for background processing
+    await Task.Delay(500);
+
+    // Assert
+    var deadLetters = dlq.GetDeadLetters<OrderCreatedEvent>();
+    Assert.AreEqual(1, deadLetters.Count);
+    Assert.IsNotNull(deadLetters.First().Exception);
+}
+```
+
+### Upcoming Feature: Dead Letter API
+
+We are currently developing a management API to interact with the InMemory Dead Letter Queue programmatically. This API will allow you to:
+
+*   **Retrieve Failed Messages**: Query for messages that have exceeded their `retryCount` and are no longer being attempted.
+*   **Inspect Exceptions**: View the specific errors that caused the messages to fail.
+*   **Replay Messages**: (Planned) Trigger a re-processing attempt for specific dead letters.
+
+This feature will be particularly useful for building administrative dashboards or monitoring tools for applications running the InMemory provider.
+
 ## Best Practices
 
 1. **Keep Handlers Focused**: Each handler should handle one specific event type or related events
@@ -287,3 +341,5 @@ services.AddChirp(options =>
 
 // Future: Secondary event bus (different provider)
 // This will be supported once additional providers are implemented
+
+```

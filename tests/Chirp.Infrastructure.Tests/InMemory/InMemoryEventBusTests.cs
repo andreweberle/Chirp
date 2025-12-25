@@ -311,6 +311,7 @@ public class InMemoryEventBusTests
         ServiceCollection services = [];
         services.AddSingleton(typedHandler);
         services.AddSingleton<TestIntegrationEventHandler>(_ => typedHandler);
+        services.AddSingleton<IChirpInMemoryDeadLetterQueue, InMemoryDeadLetterQueue>();
         ServiceProvider serviceProvider = services.BuildServiceProvider();
 
         // Create the bus

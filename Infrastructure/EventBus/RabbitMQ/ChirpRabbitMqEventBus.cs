@@ -57,7 +57,7 @@ public class ChirpRabbitMqEventBus : EventBusBase, IAsyncDisposable
         int retryMax = 5,
         string exchangeName = BrokerName,
         string dlxExchangeName = "_dlxExchangeName")
-        : base(eventBusSubscriptionsManager, serviceProvider)
+        : base(retryMax, eventBusSubscriptionsManager, serviceProvider)
     {
         _rabbitMQConnection = rabbitMQConnection ?? throw new ArgumentNullException(nameof(rabbitMQConnection));
         _queueName = queueName ?? throw new ArgumentNullException(nameof(queueName));

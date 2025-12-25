@@ -81,14 +81,6 @@ public static class DependencyInjection
             // Register event bus using options
             services = services.AddEventBus(null, options);
             
-            services.AddSingleton<Channel<IntegrationEvent>>(
-                _ => Channel.CreateUnbounded<IntegrationEvent>(new UnboundedChannelOptions()
-                {
-                    SingleReader = true,
-                    SingleWriter = false,
-                    AllowSynchronousContinuations = false
-                }));
-            
             // Return the service collection
             return services;
         }
@@ -566,8 +558,24 @@ public static class DependencyInjection
     {
         public IServiceCollection AddInMemoryEventBusConnection(InMemoryOptions? options = null)
         {
+            // TODO: Check if the user wants a persistent in-memory store (e.g., using LiteDB or similar)
+            
+            // Create a channel for publishing events.
+            services.AddSingleton<Channel<IntegrationEvent>>(
+                _ => Channel.CreateUnbounded<IntegrationEvent>(new UnboundedChannelOptions()
+                {
+                    SingleReader = true,
+                    SingleWriter = false,
+                    AllowSynchronousContinuations = false
+                }));
+            
+            // Create the in-memory event bus connection
+            services.AddSingleton<IChirpInMemoryDeadLetterQueue, InMemoryDeadLetterQueue>();
+            
             // Register the background processor, this will be used to process events.
             services.AddHostedService<ChirpInMemoryProcessor>();
+            
+            // Return the service collection
             return services;
         }
 
