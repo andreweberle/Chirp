@@ -1,4 +1,4 @@
-﻿# Chirp - Flexible Messaging Library
+﻿﻿# Chirp - Flexible Messaging Library
 
 [comment]: <![Chirp Logo](https://via.placeholder.com/150x150?text=Chirp)>
 
@@ -235,6 +235,7 @@ implementation of the core publish/subscribe functionality.
 | Provider              |        Status        | Configuration Section |
 |:----------------------|:--------------------:|:----------------------|
 | **RabbitMQ**          |  ✅ Fully Implemented | `RMQ`                 |
+| **InMemory**          |  ✅ Fully Implemented | `N/A`                 |
 | **Kafka**             | 🚧 Scaffolding in Place | `Kafka`               |
 | **Redis**             | 🚧 Scaffolding in Place | `Redis`               |
 | **Azure Service Bus** | 🚧 Scaffolding in Place | `AzureServiceBus`     |

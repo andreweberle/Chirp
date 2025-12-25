@@ -170,17 +170,18 @@ await eventBus.PublishAsync(new OrderCreatedEvent
 
 ## Message Broker Support
 
-Currently, **RabbitMQ** is the only fully implemented provider. Other message brokers have scaffolding in place but are not yet functional:
+Currently, **RabbitMQ** and **InMemory** are the fully implemented providers. Other message brokers have scaffolding in place but are not yet functional:
 
-- ? **RabbitMQ** - Fully implemented and tested
-- ?? **Kafka** - Scaffolding in place, implementation pending
-- ?? **Redis** - Scaffolding in place, implementation pending
-- ?? **Azure Service Bus** - Scaffolding in place, implementation pending
-- ?? **Amazon SQS** - Scaffolding in place, implementation pending
-- ?? **NATS** - Scaffolding in place, implementation pending
-- ?? **Google Pub/Sub** - Scaffolding in place, implementation pending
+- ✅ **RabbitMQ** - Fully implemented and tested
+- ✅ **InMemory** - Fully implemented and tested
+- 🚧 **Kafka** - Scaffolding in place, implementation pending
+- 🚧 **Redis** - Scaffolding in place, implementation pending
+- 🚧 **Azure Service Bus** - Scaffolding in place, implementation pending
+- 🚧 **Amazon SQS** - Scaffolding in place, implementation pending
+- 🚧 **NATS** - Scaffolding in place, implementation pending
+- 🚧 **Google Pub/Sub** - Scaffolding in place, implementation pending
 
-When using non-RabbitMQ providers, you'll encounter `NotImplementedException` until those implementations are completed.
+When using non-implemented providers, you'll encounter `NotImplementedException` until those implementations are completed.
 
 ## Error Handling
 
@@ -197,6 +198,55 @@ services.AddChirp(options =>
     options.AddConsumer<OrderCreatedEventHandler>();
 });
 ```
+
+## Testing with Chirp
+
+The `InMemory` provider is perfect for unit and integration testing. It allows you to verify that events are published and handled without needing a real message broker.
+
+```csharp
+[TestClass]
+public class OrderServiceTests
+{
+    [TestMethod]
+    public void CreateOrder_PublishesEvent()
+    {
+        // Arrange
+        var services = new ServiceCollection();
+        
+        // Use InMemory provider for testing
+        services.AddChirp(options =>
+        {
+            options.EventBusType = EventBusType.InMemory;
+            options.AddConsumer<TestOrderCreatedHandler>();
+        });
+        
+        var provider = services.BuildServiceProvider();
+        var eventBus = provider.GetRequiredService<IChirpEventBus>();
+        
+        // Act
+        // ... call your service method ...
+        
+        // Assert
+        // ... verify event was handled ...
+    }
+}
+```
+
+## Disabling Automatic Subscription
+
+By default, Chirp automatically subscribes all registered consumers when the event bus is initialized. If you want to manually control subscriptions, you can disable this behavior:
+
+```csharp
+services.AddChirp(options =>
+{
+    options.EventBusType = EventBusType.RabbitMQ;
+    options.AutoSubscribeConsumers = false; // Disable auto-subscription
+    
+    options.AddConsumer<OrderCreatedEventHandler>();
+});
+```
+
+When disabled, you must manually subscribe handlers using `eventBus.SubscribeAsync<T, TH>()`.
 
 ## Best Practices
 
