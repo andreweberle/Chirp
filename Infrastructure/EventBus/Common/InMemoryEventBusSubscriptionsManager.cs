@@ -1,3 +1,4 @@
+using System.Collections;
 using Chirp.Application.Interfaces;
 using Chirp.Domain.Common;
 
@@ -139,7 +140,7 @@ public class InMemoryEventBusSubscriptionsManager : IChirpEventBusSubscriptionsM
 
     private SubscriptionInfo? DoFindSubscriptionToRemove(string eventName, Type handlerType)
     {
-        if (!_handlers.TryGetValue(eventName, out var handlers)) return null;
-        return handlers.SingleOrDefault(s => s.HandlerType == handlerType);
+        return !_handlers.TryGetValue(eventName, out List<SubscriptionInfo>? handlers) 
+            ? null : handlers.SingleOrDefault(s => s.HandlerType == handlerType);
     }
 }
