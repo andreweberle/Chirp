@@ -13,8 +13,7 @@ builder.Services.AddChirp((InMemoryOptions options) =>
     options.AutoSubscribeConsumers = true;
 });
 
-builder.Services.AddHostedService<Worker>();
-
+builder.Services.AddHostedService<ChirpBackgroundWorker>();
 IHost host = builder.Build();
 
 host.UseChirp();

@@ -20,13 +20,13 @@ public class DependencyInjectionTests
     public void DetermineEventBusType_RabbitMqChirpOptions_ReturnsRabbitMQ()
     {
         // Arrange
-        var options = new RabbitMqChirpOptions();
+        RabbitMqChirpOptions options = new RabbitMqChirpOptions();
         Assert.IsNotNull(DetermineEventBusTypeMethod,
             "DetermineEventBusType method not found in DependencyInjection class");
 
         // Act
-        var result = (EventBusType)(DetermineEventBusTypeMethod!.Invoke(null, new object[] { options }) ??
-                                    EventBusType.RabbitMQ);
+        EventBusType result = (EventBusType)(DetermineEventBusTypeMethod!.Invoke(null, new object[] { options }) ??
+                                             EventBusType.RabbitMQ);
 
         // Assert
         Assert.AreEqual(EventBusType.RabbitMQ, result);
@@ -36,13 +36,13 @@ public class DependencyInjectionTests
     public void DetermineEventBusType_KafkaChirpOptions_ReturnsKafka()
     {
         // Arrange
-        var options = new KafkaChirpOptions();
+        KafkaChirpOptions options = new KafkaChirpOptions();
         Assert.IsNotNull(DetermineEventBusTypeMethod,
             "DetermineEventBusType method not found in DependencyInjection class");
 
         // Act
-        var result = (EventBusType)(DetermineEventBusTypeMethod!.Invoke(null, new object[] { options }) ??
-                                    EventBusType.Kafka);
+        EventBusType result = (EventBusType)(DetermineEventBusTypeMethod!.Invoke(null, new object[] { options }) ??
+                                             EventBusType.Kafka);
 
         // Assert
         Assert.AreEqual(EventBusType.Kafka, result);
@@ -52,13 +52,13 @@ public class DependencyInjectionTests
     public void DetermineEventBusType_AzureServiceBusChirpOptions_ReturnsAzureServiceBus()
     {
         // Arrange
-        var options = new AzureServiceBusChirpOptions();
+        AzureServiceBusChirpOptions options = new AzureServiceBusChirpOptions();
         Assert.IsNotNull(DetermineEventBusTypeMethod,
             "DetermineEventBusType method not found in DependencyInjection class");
 
         // Act
-        var result = (EventBusType)(DetermineEventBusTypeMethod!.Invoke(null, new object[] { options }) ??
-                                    EventBusType.AzureServiceBus);
+        EventBusType result = (EventBusType)(DetermineEventBusTypeMethod!.Invoke(null, new object[] { options }) ??
+                                             EventBusType.AzureServiceBus);
 
         // Assert
         Assert.AreEqual(EventBusType.AzureServiceBus, result);
@@ -68,13 +68,13 @@ public class DependencyInjectionTests
     public void DetermineEventBusType_AmazonSqsChirpOptions_ReturnsAmazonSqs()
     {
         // Arrange
-        var options = new AmazonSqsChirpOptions();
+        AmazonSqsChirpOptions options = new AmazonSqsChirpOptions();
         Assert.IsNotNull(DetermineEventBusTypeMethod,
             "DetermineEventBusType method not found in DependencyInjection class");
 
         // Act
-        var result = (EventBusType)(DetermineEventBusTypeMethod!.Invoke(null, new object[] { options }) ??
-                                    EventBusType.AmazonSqs);
+        EventBusType result = (EventBusType)(DetermineEventBusTypeMethod!.Invoke(null, new object[] { options }) ??
+                                             EventBusType.AmazonSqs);
 
         // Assert
         Assert.AreEqual(EventBusType.AmazonSqs, result);
@@ -84,13 +84,13 @@ public class DependencyInjectionTests
     public void DetermineEventBusType_RedisChirpOptions_ReturnsRedis()
     {
         // Arrange
-        var options = new RedisChirpOptions();
+        RedisChirpOptions options = new RedisChirpOptions();
         Assert.IsNotNull(DetermineEventBusTypeMethod,
             "DetermineEventBusType method not found in DependencyInjection class");
 
         // Act
-        var result = (EventBusType)(DetermineEventBusTypeMethod!.Invoke(null, new object[] { options }) ??
-                                    EventBusType.Redis);
+        EventBusType result = (EventBusType)(DetermineEventBusTypeMethod!.Invoke(null, new object[] { options }) ??
+                                             EventBusType.Redis);
 
         // Assert
         Assert.AreEqual(EventBusType.Redis, result);
@@ -100,13 +100,13 @@ public class DependencyInjectionTests
     public void DetermineEventBusType_GooglePubSubChirpOptions_ReturnsGooglePubSub()
     {
         // Arrange
-        var options = new GooglePubSubChirpOptions();
+        GooglePubSubChirpOptions options = new GooglePubSubChirpOptions();
         Assert.IsNotNull(DetermineEventBusTypeMethod,
             "DetermineEventBusType method not found in DependencyInjection class");
 
         // Act
-        var result = (EventBusType)(DetermineEventBusTypeMethod!.Invoke(null, new object[] { options }) ??
-                                    EventBusType.GooglePubSub);
+        EventBusType result = (EventBusType)(DetermineEventBusTypeMethod!.Invoke(null, new object[] { options }) ??
+                                             EventBusType.GooglePubSub);
 
         // Assert
         Assert.AreEqual(EventBusType.GooglePubSub, result);
@@ -116,7 +116,7 @@ public class DependencyInjectionTests
     public void DetermineEventBusType_NatsChirpOptions_ReturnsNATS()
     {
         // Arrange
-        var options = new NatsChirpOptions();
+        NatsChirpOptions options = new NatsChirpOptions();
         Assert.IsNotNull(DetermineEventBusTypeMethod,
             "DetermineEventBusType method not found in DependencyInjection class");
 
@@ -132,13 +132,12 @@ public class DependencyInjectionTests
     public void DetermineEventBusType_BaseChirpOptions_ReturnsEventBusTypeProperty()
     {
         // Arrange
-        var options = new ChirpOptions { EventBusType = EventBusType.AzureServiceBus };
+        ChirpOptions options = new ChirpOptions { EventBusType = EventBusType.AzureServiceBus };
         Assert.IsNotNull(DetermineEventBusTypeMethod,
             "DetermineEventBusType method not found in DependencyInjection class");
 
         // Act
-        var result = (EventBusType)(DetermineEventBusTypeMethod!.Invoke(null, new object[] { options }) ??
-                                    EventBusType.AzureServiceBus);
+        EventBusType result = (EventBusType)(DetermineEventBusTypeMethod!.Invoke(null, [options]) ?? EventBusType.AzureServiceBus);
 
         // Assert
         Assert.AreEqual(EventBusType.AzureServiceBus, result);
@@ -148,8 +147,8 @@ public class DependencyInjectionTests
     public void AddChirp_WithConfigureOptionsAction_RegistersServices()
     {
         // Arrange
-        var services = new ServiceCollection();
-        var configuration = new ConfigurationBuilder().Build();
+        ServiceCollection services = [];
+        IConfigurationRoot configuration = new ConfigurationBuilder().Build();
 
         // Add configuration to DI
         services.AddSingleton<IConfiguration>(configuration);
@@ -165,7 +164,9 @@ public class DependencyInjectionTests
             {
                 options.EventBusType = EventBusType.RabbitMQ;
                 options.QueueName = "test_queue";
-                options.RetryCount = 3;
+                options.RetryCount = 5;
+                options.ExchangeName = "test_exchange";
+                options.DeadLetterExchangeName = "test_dlx_exchange";
             });
         }
         catch (NotImplementedException)

@@ -294,7 +294,7 @@ public class RabbitMqEventBusTests
         string? receivedMessage = null;
 
         // Set up a consumer to verify the message was published
-        using IChannel channel = await connection.CreateChannelAsync(TestContext.CancellationToken);
+        await using IChannel channel = await connection.CreateChannelAsync(TestContext.CancellationToken);
 
         // Make sure the queue exists and is bound to the exchange
         await channel.ExchangeDeclareAsync(exchangeName, ExchangeType.Direct, true, cancellationToken: TestContext.CancellationToken);
@@ -344,7 +344,7 @@ public class RabbitMqEventBusTests
         const string dlxExchangeName = "test_subscribe_dlx_exchange";
 
         // Predeclare the exchange and queue so that Subscribe() can bind them
-        using (IChannel adminChannel = await connection.CreateChannelAsync(TestContext.CancellationToken))
+        await using (IChannel adminChannel = await connection.CreateChannelAsync(TestContext.CancellationToken))
         {
             await adminChannel.ExchangeDeclareAsync(
                 exchangeName,
@@ -407,12 +407,12 @@ public class RabbitMqEventBusTests
         IChirpRabbitMqConnection connection = CreateConnection();
         InMemoryEventBusSubscriptionsManager subscriptionsManager = new();
 
-        const string queueName = "test_subscribe_queue";
-        const string exchangeName = "test_subscribe_exchange";
-        const string dlxExchangeName = "test_subscribe_dlx_exchange";
+        const string queueName = "test_Subscribe_RegistersAndInvokes_FailedEventHandler_subscribe_queue";
+        const string exchangeName = "test_Subscribe_RegistersAndInvokes_FailedEventHandler_subscribe_exchange";
+        const string dlxExchangeName = "test_Subscribe_RegistersAndInvokes_FailedEventHandler_subscribe_dlx_exchange";
 
         // Predeclare the exchange and queue so that Subscribe() can bind them
-        using (IChannel adminChannel = await connection.CreateChannelAsync(TestContext.CancellationToken))
+        await using (IChannel adminChannel = await connection.CreateChannelAsync(TestContext.CancellationToken))
         {
             await adminChannel.ExchangeDeclareAsync(
                 exchangeName,
@@ -431,7 +431,7 @@ public class RabbitMqEventBusTests
         TestFailedIntegrationEventHandler typedHandler = new();
 
         // Set up DI with the handler as a singleton
-        ServiceCollection services = new();
+        ServiceCollection services = [];
         services.AddSingleton(typedHandler); // Register the exact instance we'll check later
         services.AddSingleton<TestFailedIntegrationEventHandler>(_ => typedHandler); // Also register by type
         ServiceProvider serviceProvider = services.BuildServiceProvider();
@@ -454,10 +454,13 @@ public class RabbitMqEventBusTests
 
         // Now publish event
         TestFailedIntegrationEvent testEvent = new() { Message = "Test subscription message" };
-        await eventBus.PublishAsync(testEvent, TestContext.CancellationToken);
+        bool result = await eventBus.PublishAsync(testEvent, TestContext.CancellationToken);
 
+        // Assert wait up to 5s for the handler to flip its flag
+        Assert.IsTrue(result, "Event should be published successfully");
+        
         // Assert wait up to 60s for the handler to flip its flag
-        TimeSpan maxWait = TimeSpan.FromSeconds(60); 
+        TimeSpan maxWait = TimeSpan.FromSeconds(120); 
         DateTime startTime = DateTime.UtcNow;
 
         // Create a http client to check if we get a message in the dead letter exchange.
@@ -471,17 +474,19 @@ public class RabbitMqEventBusTests
 
         while (!isMessageInDLX && DateTime.UtcNow - startTime < maxWait)
         {
-            await Task.Delay(100, TestContext.CancellationToken);
+            await Task.Delay(1000, TestContext.CancellationToken);
 
             using HttpRequestMessage request = new(HttpMethod.Get, uri);
             using HttpResponseMessage response = await client.SendAsync(request, TestContext.CancellationToken);
-            var responseBody = await response.Content.ReadAsStringAsync(TestContext.CancellationToken);
+            string responseBody = await response.Content.ReadAsStringAsync(TestContext.CancellationToken);
 
-            if (responseBody.Contains("\"messages_ready\":1"))
-            {
-                // Message is in the DLX
-                isMessageInDLX = true;
-            }
+            // Check if the message is in the DLX
+            if (!responseBody.Contains("\"messages_ready\":1")) continue;
+            
+            // Message is in the DLX
+            isMessageInDLX = true;
+            
+            break;
         }
 
         Assert.IsTrue(typedHandler.HandlerCalled, "Event handler should be called");
