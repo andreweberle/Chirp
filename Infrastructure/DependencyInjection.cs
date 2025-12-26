@@ -615,6 +615,7 @@ public static class DependencyInjection
         private IServiceCollection AddRabbitMqConnection(IConfiguration configuration,
             RabbitMqChirpOptions? options = null)
         {
+            
             services.AddSingleton<IChirpRabbitMqConnection>(sp =>
             {
                 string host = options?.Host ?? configuration.GetValue<string>("RMQ:Host") ?? throw new ArgumentNullException("RMQ:Host configuration is missing");
@@ -643,11 +644,11 @@ public static class DependencyInjection
     
     private static void RegisterLogging(IServiceCollection services, ChirpOptions options)
     {
+        // Add chirp options to singleton services container so we can access them later.
+        services.AddSingleton(options);
+        
         // Check if we need to register a logger.
-        if (options.LoggingEnabled)
-        {
-            services.AddSingleton<ILogger, ChirpLogger>();
-        }
+        services.AddSingleton<ChirpLogger>();
     }
     
     /// <summary>
