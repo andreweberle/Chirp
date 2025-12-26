@@ -10,6 +10,7 @@ public class NewMessageEventHandler(ILogger<NewMessageEventHandler> logger) : IC
 
     public async Task Handle(ChirpEvent @event)
     {
+        // Check if the user has logging enabled.
         if (_logger.IsEnabled(LogLevel.Information))
         {
             // Log the event message
@@ -18,7 +19,7 @@ public class NewMessageEventHandler(ILogger<NewMessageEventHandler> logger) : IC
 
         // Simulate a random exception, we will use this to test error handling.
         // 1 in 3 chance of throwing an exception.
-        if (new Random().Next(1, 3) == 1)
+        if (@event.ThrowException && new Random().Next(1, 3) == 1)
         {
             throw new Exception("Test exception");
         }

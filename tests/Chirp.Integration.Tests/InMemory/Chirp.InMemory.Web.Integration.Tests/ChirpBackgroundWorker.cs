@@ -26,7 +26,7 @@ public class ChirpBackgroundWorker(
 
             // Send a random message to the event bus
             bool result =  await _chirpEventBus.PublishAsync(
-                new ChirpEvent($"Hello World! @ '{DateTimeOffset.Now}'"), stoppingToken);
+                new ChirpEvent($"Hello World! @ '{DateTimeOffset.Now}'", true), stoppingToken);
             
             // Check if the message was published successfully
             if (result)

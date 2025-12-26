@@ -11,6 +11,7 @@ builder.Services.AddChirp((InMemoryOptions options) =>
     options.EventBusType = EventBusType.InMemory;
     options.AddConsumer<NewMessageEventHandler>();
     options.AutoSubscribeConsumers = true;
+    options.LoggingEnabled = true;
 });
 
 builder.Services.AddHostedService<ChirpBackgroundWorker>();

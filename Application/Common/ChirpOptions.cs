@@ -24,6 +24,11 @@ public class ChirpOptions
     /// Number of retries for processing events
     /// </summary>
     public int RetryCount { get; set; } = 5;
+    
+    /// <summary>
+    /// Whether to enable logging
+    /// </summary>
+    public bool LoggingEnabled { get; set; } = false;
 
     /// <summary>
     /// Collection of registered event handler types

@@ -1,7 +1,4 @@
-using System.Reflection;
-using System.Text;
 using System.Text.Json;
-using System.Text.Json.Serialization;
 using System.Threading.Channels;
 using Chirp.Application.Interfaces;
 using Chirp.Domain.Common;
@@ -9,12 +6,12 @@ using Chirp.Domain.Common;
 namespace Chirp.Infrastructure.EventBus.InMemory;
 
 public class ChirpInMemoryProcessor(
-    ILogger<ChirpInMemoryProcessor> logger, 
+    ILogger<ChirpLogger> logger, 
     Channel<IntegrationEvent> channel,
     IChirpEventBus chirpEventBus,
     IChirpInMemoryDeadLetterQueue deadLetterQueue) : BackgroundService
 {
-    private readonly ILogger<ChirpInMemoryProcessor> _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+    private readonly ILogger<ChirpLogger> _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     private readonly Channel<IntegrationEvent> _channel = channel ?? throw new ArgumentNullException(nameof(channel));
     private readonly IChirpEventBus _chirpEventBus = chirpEventBus ?? throw new ArgumentNullException(nameof(chirpEventBus));
     private readonly IChirpInMemoryDeadLetterQueue _deadLetterQueue = deadLetterQueue ?? throw new ArgumentNullException(nameof(deadLetterQueue));
@@ -28,6 +25,7 @@ public class ChirpInMemoryProcessor(
                 // Get the event name.
                 string eventName = integrationEvent.GetType().Name;
                 
+                // Get the event type.
                 Type eventType = integrationEvent.GetType();
                 
                 // Serialize the event to JSON.

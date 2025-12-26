@@ -1,4 +1,5 @@
 using Chirp.Application.Interfaces;
+using Chirp.Domain.Common;
 using Polly;
 using Polly.Retry;
 using RabbitMQ.Client;
@@ -6,8 +7,11 @@ using RabbitMQ.Client.Events;
 
 namespace Chirp.Infrastructure.EventBus.RabbitMQ;
 
-internal sealed class ChirpRabbitMqConnection(IConnectionFactory connectionFactory) : IChirpRabbitMqConnection, IAsyncDisposable
+internal sealed class ChirpRabbitMqConnection(
+    IConnectionFactory connectionFactory, 
+    ChirpLogger logger) : IChirpRabbitMqConnection, IAsyncDisposable
 {
+    private readonly ChirpLogger _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     private readonly IConnectionFactory _connectionFactory = connectionFactory;
     
     // Lock to ensure only one connection attempt happens at a time
@@ -36,17 +40,20 @@ internal sealed class ChirpRabbitMqConnection(IConnectionFactory connectionFacto
 
     public async Task<IChannel> CreateChannelAsync(CancellationToken cancellationToken = default)
     {
-        if (!IsConnected)
-        {
-            await TryConnectAsync(cancellationToken);
-            
-            if (!IsConnected)
-            {
-                throw new InvalidOperationException("RabbitMQ connection is not available.");
-            }
-        }
+        // Check if already connected
+        if (IsConnected) return await _connection!.CreateChannelAsync(_channelOptions, cancellationToken);
+        
+        // Attempt to connect.
+        await TryConnectAsync(cancellationToken);
 
-        return await _connection!.CreateChannelAsync(_channelOptions, cancellationToken);
+        // Check if still connected after connecting.
+        if (IsConnected) return await _connection!.CreateChannelAsync(_channelOptions, cancellationToken);
+        
+        // Log error and throw exception if connection is not available.
+        _logger.Log(LogLevel.Error, 0, "RabbitMQ connection is not available.", null, (s, e) => s);
+        
+        // Throw exception if connection is not available.
+        throw new InvalidOperationException("RabbitMQ connection is not available.");
     }
 
     public async Task<bool> TryConnectAsync(CancellationToken cancellationToken = default)
@@ -54,7 +61,9 @@ internal sealed class ChirpRabbitMqConnection(IConnectionFactory connectionFacto
         if (_disposed) return false;
         if (IsConnected) return true;
 
+        // Acquire the connection lock.
         await _connectionLock.WaitAsync(cancellationToken);
+        
         try
         {
             // Double-check if connected after acquiring lock
@@ -64,21 +73,20 @@ internal sealed class ChirpRabbitMqConnection(IConnectionFactory connectionFacto
             _connection = await _retryPolicy.ExecuteAsync(async () => 
                 await _connectionFactory.CreateConnectionAsync(cancellationToken));
 
-            if (IsConnected)
-            {
-                _connection.ConnectionShutdownAsync += OnConnectionShutdownAsync;
-                _connection.CallbackExceptionAsync += OnCallbackExceptionAsync;
-                _connection.ConnectionBlockedAsync += OnConnectionBlockedAsync;
+            if (!IsConnected) return false;
+            
+            _connection.ConnectionShutdownAsync += OnConnectionShutdownAsync;
+            _connection.CallbackExceptionAsync += OnCallbackExceptionAsync;
+            _connection.ConnectionBlockedAsync += OnConnectionBlockedAsync;
 
-                Console.WriteLine("RabbitMQ connected.");
-                return true;
-            }
+            _logger.LogInformation("RabbitMQ connecting...");
+            return true;
 
-            return false;
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"RabbitMQ connect failed: {ex.Message}");
+            if (!_logger.IsEnabled(LogLevel.Error)) return false;
+            _logger.LogError(ex, "RabbitMQ connect failed: {Message}", ex.Message);
             return false;
         }
         finally
@@ -93,25 +101,33 @@ internal sealed class ChirpRabbitMqConnection(IConnectionFactory connectionFacto
 
         if (e.Initiator == ShutdownInitiator.Application)
         {
-            Console.WriteLine($"RabbitMQ shutdown (application): {e.ReplyText}");
+            if (!_logger.IsEnabled(LogLevel.Information)) return;
+            _logger.LogInformation("RabbitMQ shutting down...");
+            _logger.LogInformation("RabbitMQ shutdown (application): {ReplyText}", e.ReplyText);
             return;
         }
-
-        Console.WriteLine($"RabbitMQ shutdown (unexpected): {e.ReplyText}");
+        
+        // Attempt to reconnect.
         await ReconnectAsync();
     }
 
     private async Task OnCallbackExceptionAsync(object? sender, CallbackExceptionEventArgs e)
     {
         if (_disposed) return;
-        Console.WriteLine($"RabbitMQ callback exception: {e.Exception.Message}");
+        if (_logger.IsEnabled(LogLevel.Error))
+        {
+            _logger.LogError(e.Exception, "RabbitMQ callback exception: {Message}", e.Exception.Message);   
+        }
+        
+        // Attempt to reconnect.
         await ReconnectAsync();
     }
 
     private async Task OnConnectionBlockedAsync(object? sender, ConnectionBlockedEventArgs e)
     {
         if (_disposed) return;
-        Console.WriteLine($"RabbitMQ blocked: {e.Reason}");
+        if (!_logger.IsEnabled(LogLevel.Warning)) return;
+        _logger.LogWarning("RabbitMQ blocked: {Reason}", e.Reason);
     }
 
     private async Task ReconnectAsync()
@@ -142,7 +158,8 @@ internal sealed class ChirpRabbitMqConnection(IConnectionFactory connectionFacto
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"Error disposing RabbitMQ connection: {ex.Message}");
+            if (!_logger.IsEnabled(LogLevel.Error)) return;
+            _logger.LogError(ex, "Error disposing RabbitMQ connection: {Message}", ex.Message);
         }
         finally
         {

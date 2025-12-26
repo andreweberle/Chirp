@@ -116,8 +116,7 @@ public static class EventBusFactory
         const int retryCount = 5;
         
         // Create the in-memory event bus
-        return new ChirpInMemoryEventBus(subscriptionsManager, serviceProvider, queueName, retryCount, exchangeName,
-            dlxExchangeName);
+        return new ChirpInMemoryEventBus(subscriptionsManager, serviceProvider, queueName, retryCount, exchangeName, dlxExchangeName);
     }
 
     private static ChirpRabbitMqEventBus CreateRabbitMQEventBus(
@@ -176,9 +175,7 @@ public static class EventBusFactory
         KafkaChirpOptions options)
     {
         // Get the Kafka connection
-        IKafkaConnection connection = serviceProvider.GetService(typeof(IKafkaConnection)) as IKafkaConnection
-                                      ?? throw new InvalidOperationException(
-                                          "Kafka connection not registered in service provider");
+        IKafkaConnection connection = serviceProvider.GetService(typeof(IKafkaConnection)) as IKafkaConnection ?? throw new InvalidOperationException("Kafka connection not registered in service provider");
 
         // Create the Kafka event bus
         return new KafkaEventBus(
@@ -198,9 +195,7 @@ public static class EventBusFactory
         int retryCount)
     {
         // Get the Kafka connection
-        IKafkaConnection connection = serviceProvider.GetService(typeof(IKafkaConnection)) as IKafkaConnection
-                                      ?? throw new InvalidOperationException(
-                                          "Kafka connection not registered in service provider");
+        IKafkaConnection connection = serviceProvider.GetService(typeof(IKafkaConnection)) as IKafkaConnection ?? throw new InvalidOperationException("Kafka connection not registered in service provider");
 
         // Create the Kafka event bus
         return new KafkaEventBus(

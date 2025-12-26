@@ -75,6 +75,9 @@ public static class DependencyInjection
             InMemoryOptions options = new InMemoryOptions();
             configureOptions(options);
 
+            // Register logging if enabled
+            RegisterLogging(services, options);
+            
             // Register consumers first so they're available when the event bus is created
             RegisterConsumers(services, options);
 
@@ -97,6 +100,9 @@ public static class DependencyInjection
             ArgumentNullException.ThrowIfNull(configuration);
             ChirpOptions options = new();
             configureOptions(options);
+            
+            // Register logging if enabled
+            RegisterLogging(services, options);
 
             // Register consumers first so they're available when the event bus is created
             RegisterConsumers(services, options);
@@ -120,6 +126,9 @@ public static class DependencyInjection
 
             RabbitMqChirpOptions options = new();
             configureOptions(options);
+            
+            // Register logging if enabled
+            RegisterLogging(services, options);
 
             // Register consumers first so they're available when the event bus is created
             RegisterConsumers(services, options);
@@ -144,6 +153,9 @@ public static class DependencyInjection
 
             KafkaChirpOptions options = new();
             configureOptions(options);
+            
+            // Register logging if enabled
+            RegisterLogging(services, options);
 
             // Register consumers first so they're available when the event bus is created
             RegisterConsumers(services, options);
@@ -167,6 +179,9 @@ public static class DependencyInjection
 
             AzureServiceBusChirpOptions options = new();
             configureOptions(options);
+            
+            // Register logging if enabled
+            RegisterLogging(services, options);
 
             // Register consumers first so they're available when the event bus is created
             RegisterConsumers(services, options);
@@ -190,6 +205,9 @@ public static class DependencyInjection
 
             AmazonSqsChirpOptions options = new();
             configureOptions(options);
+            
+            // Register logging if enabled
+            RegisterLogging(services, options);
 
             // Register consumers first so they're available when the event bus is created
             RegisterConsumers(services, options);
@@ -213,6 +231,9 @@ public static class DependencyInjection
 
             RedisChirpOptions options = new();
             configureOptions(options);
+            
+            // Register logging if enabled
+            RegisterLogging(services, options);
 
             // Register consumers first so they're available when the event bus is created
             RegisterConsumers(services, options);
@@ -236,6 +257,9 @@ public static class DependencyInjection
 
             GooglePubSubChirpOptions options = new();
             configureOptions(options);
+            
+            // Register logging if enabled
+            RegisterLogging(services, options);
 
             // Register consumers first so they're available when the event bus is created
             RegisterConsumers(services, options);
@@ -259,6 +283,9 @@ public static class DependencyInjection
 
             NatsChirpOptions options = new();
             configureOptions(options);
+            
+            // Register logging if enabled
+            RegisterLogging(services, options);
 
             // Register consumers first so they're available when the event bus is created
             RegisterConsumers(services, options);
@@ -607,13 +634,22 @@ public static class DependencyInjection
                 );
             
                 // Create a RabbitMQ connection based on the factory
-                return new ChirpRabbitMqConnection(connectionFactory);
+                return new ChirpRabbitMqConnection(connectionFactory, sp.GetRequiredService<ChirpLogger>());
             });
 
             return services;
         }
     }
-
+    
+    private static void RegisterLogging(IServiceCollection services, ChirpOptions options)
+    {
+        // Check if we need to register a logger.
+        if (options.LoggingEnabled)
+        {
+            services.AddSingleton<ILogger, ChirpLogger>();
+        }
+    }
+    
     /// <summary>
     /// Registers event consumers as transient services
     /// </summary>
@@ -659,7 +695,8 @@ public static class DependencyInjection
     /// <param name="eventBus">The event bus</param>
     /// <param name="options">The chirp options</param>
     /// <param name="serviceProvider">The service provider</param>
-    private static void AutoSubscribeEventHandlers(IChirpEventBus eventBus, ChirpOptions options, IServiceProvider serviceProvider)
+    private static void AutoSubscribeEventHandlers(
+        IChirpEventBus eventBus, ChirpOptions options, IServiceProvider serviceProvider)
     {
         // Check if there are any consumers to subscribe.
         if (options.Consumers.Count == 0)

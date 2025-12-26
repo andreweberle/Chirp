@@ -21,6 +21,7 @@ public class ChirpRabbitMqEventBus : EventBusBase, IAsyncDisposable
     private readonly int _retryMax;
     
     private IChannel? _consumerChannel;
+    private readonly ILogger<ChirpLogger> _logger;
     
     // Single lock for all infrastructure changes (initialization and consumer starting)
     private readonly SemaphoreSlim _infrastructureLock = new(1, 1);
@@ -65,7 +66,9 @@ public class ChirpRabbitMqEventBus : EventBusBase, IAsyncDisposable
         _retryMax = retryMax;
         ExchangeName = exchangeName;
         DlxExchangeName = dlxExchangeName;
-        Console.WriteLine("RabbitMQ event bus created. Infrastructure will be initialized on first use.");
+        
+        _logger = serviceProvider.GetRequiredService<ILogger<ChirpLogger>>();
+        if (_logger.IsEnabled(LogLevel.Information)) _logger.LogInformation("RabbitMQ event bus created. Infrastructure will be initialized on first use.");
     }
 
     /// <summary>
@@ -138,9 +141,12 @@ public class ChirpRabbitMqEventBus : EventBusBase, IAsyncDisposable
             // Get the event name.
             string eventName = typeof(T).Name;
 
-            // Log subscription
-            Console.WriteLine($"--------------");
-            Console.WriteLine($"Attempting to subscribe {typeof(TH).Name} to {eventName}");
+            if (_logger.IsEnabled(LogLevel.Information))
+            {
+                // Log subscription
+                _logger.LogInformation($"--------------");
+                _logger.LogInformation("Attempting to subscribe {HandlerName} to {EventName}", typeof(TH).Name, eventName);   
+            }
 
             // Bind queue to exchange for this event type
             await using (IChannel channel = await _rabbitMQConnection.CreateChannelAsync(cancellationToken))
@@ -155,12 +161,16 @@ public class ChirpRabbitMqEventBus : EventBusBase, IAsyncDisposable
             // Start the consumer if not already started
             await StartConsumerAsync(cancellationToken);
 
-            // Log subscription
-            Console.WriteLine($"Subscribed {typeof(TH).Name} to {eventName}");
+            if (_logger.IsEnabled(LogLevel.Information))
+            {
+                // Log subscription
+                _logger.LogInformation("Subscribed {HandlerName} to {EventName}", typeof(TH).Name, eventName);
+            }
         }
         catch (Exception ex)
-        {
-            Console.WriteLine($"Error subscribing {typeof(TH).Name}: {ex.Message}");
+        { 
+            if (!_logger.IsEnabled(LogLevel.Error)) return;
+            _logger.LogError(ex, "Error subscribing {HandlerName}: {Message}", typeof(TH).Name, ex.Message);
             throw;
         }
     }
@@ -203,7 +213,8 @@ public class ChirpRabbitMqEventBus : EventBusBase, IAsyncDisposable
 
             // Mark as initialized
             _isInfrastructureInitialized = true;
-            Console.WriteLine("RabbitMQ infrastructure initialized.");
+            
+            if (_logger.IsEnabled(LogLevel.Information)) _logger.LogInformation("RabbitMQ infrastructure initialized.");
         }
         finally
         {
@@ -298,7 +309,7 @@ public class ChirpRabbitMqEventBus : EventBusBase, IAsyncDisposable
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"Error processing event {eventName}: {ex.Message}");
+            if (_logger.IsEnabled(LogLevel.Error)) _logger.LogError(ex, "Error processing event {EventName}: {Message}", eventName, ex.Message);
             await HandleProcessingFailureAsync(eventArgs, eventName, retryCount, ex);
         }
     }
@@ -373,7 +384,7 @@ public class ChirpRabbitMqEventBus : EventBusBase, IAsyncDisposable
     private async Task OnConsumerChannelException(object sender, CallbackExceptionEventArgs e)
     {
         // Log the exception
-        Console.WriteLine($"Consumer channel error: {e.Exception.Message}");
+        if (_logger.IsEnabled(LogLevel.Error)) _logger.LogError(e.Exception, "RabbitMQ consumer channel error: {Message}", e.Exception.Message);
 
         // Mark consumer as not started
         _isConsumerStarted = false;
@@ -395,7 +406,7 @@ public class ChirpRabbitMqEventBus : EventBusBase, IAsyncDisposable
             // Swallow recovery errors to avoid crashing
 
             // Log the error
-            Console.WriteLine($"Error restarting consumer: {ex.Message}");
+            if (_logger.IsEnabled(LogLevel.Error)) _logger.LogError(ex, "Error restarting consumer: {Message}", ex.Message);
         }
     }
 
