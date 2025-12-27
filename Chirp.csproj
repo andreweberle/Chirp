@@ -1,43 +1,58 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk.Web">
 
-    <PropertyGroup>
-        <TargetFramework>net10.0</TargetFramework>
-        <ImplicitUsings>enable</ImplicitUsings>
-        <Nullable>enable</Nullable>
-        <PackageId>Chirp</PackageId>
-        <Authors>Andrew Eberle</Authors>
-        <RepositoryUrl>https://github.com/andreweberle/Chirp</RepositoryUrl>
-        <PackageDescription>
-            This library provides a simple way to publish and consume messages.
-        </PackageDescription>
-        <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
-        <Deterministic>False</Deterministic>
-        <Version>4.0.2</Version>
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
 
-        <PackageTags>messaging rabbitmq kafka redis azure-service-bus amazon-sqs nats google-pubsub event-bus</PackageTags>
-        <PackageProjectUrl>https://github.com/andreweberle/Chirp</PackageProjectUrl>
-        <PackageLicenseExpression>MIT</PackageLicenseExpression>
-        <Title>Chirp - Messaging Library</Title>
-        <Description>A flexible messaging library supporting multiple message brokers including RabbitMQ, Kafka, Redis, Azure Service Bus, Amazon SQS, NATS, and Google PubSub.</Description>
-        <PackageReadmeFile>README.md</PackageReadmeFile>
-        <OutputType>Library</OutputType>
-		<IsPackable>true</IsPackable>
-    </PropertyGroup>
-    <ItemGroup>
-        <None Include="README.md" Pack="true" PackagePath="\" />
-    </ItemGroup>
+    <PackageId>Chirp</PackageId>
+    <Authors>Andrew Eberle</Authors>
+    <RepositoryUrl>https://github.com/andreweberle/Chirp</RepositoryUrl>
 
-    <ItemGroup>
-        <Compile Remove="tests\**" />
-        <EmbeddedResource Remove="tests\**" />
-        <None Remove="tests\**" />
-    </ItemGroup>
-    <ItemGroup>
-        <PackageReference Include="Microsoft.AspNetCore.Http.Abstractions" Version="2.3.0" />
-        <PackageReference Include="Microsoft.Extensions.Configuration.Abstractions" Version="10.0.1" />
-        <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.1" />
-        <PackageReference Include="Microsoft.Extensions.Hosting" Version="10.0.1" />
-        <PackageReference Include="Polly" Version="8.6.5" />
-        <PackageReference Include="RabbitMQ.Client" Version="7.2.0" />
-    </ItemGroup>
+    <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
+    <Deterministic>false</Deterministic>
+    <Version>4.0.3</Version>
+
+    <PackageTags>messaging rabbitmq kafka redis azure-service-bus amazon-sqs nats google-pubsub event-bus</PackageTags>
+    <PackageProjectUrl>https://github.com/andreweberle/Chirp</PackageProjectUrl>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <Title>Chirp - Messaging Library</Title>
+    <Description>A flexible messaging library supporting multiple message brokers including RabbitMQ, Kafka, Redis, Azure Service Bus, Amazon SQS, NATS, and Google PubSub.</Description>
+
+    <OutputType>Library</OutputType>
+    <IsPackable>true</IsPackable>
+
+    <!-- IMPORTANT: stop auto contentFiles pollution -->
+    <IncludeContentInPack>false</IncludeContentInPack>
+  </PropertyGroup>
+
+
+  <!-- Exclude tests + build artifacts from BOTH build and pack -->
+  <ItemGroup>
+    <Compile Remove="tests\**" />
+    <EmbeddedResource Remove="tests\**" />
+    <None Remove="tests\**" />
+    <Content Remove="tests\**" />
+
+    <None Remove="**\bin\**" />
+    <Content Remove="**\bin\**" />
+    <None Remove="**\obj\**" />
+    <Content Remove="**\obj\**" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.AspNetCore.Http.Abstractions" Version="2.3.0" />
+    <PackageReference Include="Microsoft.Extensions.Configuration.Abstractions" Version="10.0.1" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.1" />
+    <PackageReference Include="Microsoft.Extensions.Hosting" Version="10.0.1" />
+    <PackageReference Include="Polly" Version="8.6.5" />
+    <PackageReference Include="RabbitMQ.Client" Version="7.2.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Update="EventBusUsage.md">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
+
 </Project>
