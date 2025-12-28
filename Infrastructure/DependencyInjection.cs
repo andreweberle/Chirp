@@ -1,13 +1,15 @@
-﻿using Chirp.Application.Common.EventBusOptions;
+﻿using Chirp.Application.Common;
+using Chirp.Application.Common.EventBusOptions;
 using Chirp.Application.Interfaces;
 using Chirp.Domain.Common;
 using Chirp.Infrastructure.EventBus;
+using Chirp.Infrastructure.EventBus.InMemory;
 using Chirp.Infrastructure.EventBus.RabbitMQ;
+using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.Options;
 using RabbitMQ.Client;
 using System.Reflection;
 using System.Threading.Channels;
-using Chirp.Application.Common;
-using Chirp.Infrastructure.EventBus.InMemory;
 
 namespace Chirp.Infrastructure;
 
@@ -70,6 +72,18 @@ public static class DependencyInjection
     /// <param name="services">The service collection</param>
     extension(IServiceCollection services)
     {
+        public IServiceCollection AddChirpLogging()
+        {
+            services.TryAddSingleton<ChirpLogger>(sp =>
+            {
+                // Use the existing ChirpOptions if the app registered them,
+                // otherwise fall back to a safe default.
+                ChirpOptions opts = sp.GetService<ChirpOptions>() ?? new ChirpOptions { LoggingEnabled = true };
+                return new ChirpLogger(opts);
+            });
+            return services;
+        }
+
         public IServiceCollection AddChirp(Action<InMemoryOptions> configureOptions)
         {
             InMemoryOptions options = new InMemoryOptions();
@@ -641,16 +655,13 @@ public static class DependencyInjection
             return services;
         }
     }
-    
+
     private static void RegisterLogging(IServiceCollection services, ChirpOptions options)
     {
-        // Add chirp options to singleton services container so we can access them later.
-        services.AddSingleton(options);
-        
-        // Check if we need to register a logger.
-        services.AddSingleton<ChirpLogger>();
+        services.Replace(ServiceDescriptor.Singleton(options));
+        services.Replace(ServiceDescriptor.Singleton<ChirpLogger>(_ => new ChirpLogger(options)));
     }
-    
+
     /// <summary>
     /// Registers event consumers as transient services
     /// </summary>

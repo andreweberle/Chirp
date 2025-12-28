@@ -1,11 +1,12 @@
+using Chirp.Application.Interfaces;
+using Chirp.Domain.Common;
+using Microsoft.Extensions.Logging.Abstractions;
+using RabbitMQ.Client;
+using RabbitMQ.Client.Events;
 using System.Reflection;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
-using Chirp.Application.Interfaces;
-using Chirp.Domain.Common;
-using RabbitMQ.Client;
-using RabbitMQ.Client.Events;
 
 namespace Chirp.Infrastructure.EventBus.RabbitMQ;
 
@@ -21,7 +22,7 @@ public class ChirpRabbitMqEventBus : EventBusBase, IAsyncDisposable
     private readonly int _retryMax;
     
     private IChannel? _consumerChannel;
-    private readonly ILogger<ChirpLogger> _logger;
+    private readonly ChirpLogger _logger;
     
     // Single lock for all infrastructure changes (initialization and consumer starting)
     private readonly SemaphoreSlim _infrastructureLock = new(1, 1);
@@ -66,9 +67,14 @@ public class ChirpRabbitMqEventBus : EventBusBase, IAsyncDisposable
         _retryMax = retryMax;
         ExchangeName = exchangeName;
         DlxExchangeName = dlxExchangeName;
-        
-        _logger = serviceProvider.GetRequiredService<ILogger<ChirpLogger>>();
-        if (_logger.IsEnabled(LogLevel.Information)) _logger.LogInformation("RabbitMQ event bus created. Infrastructure will be initialized on first use.");
+
+        // Get logger from service provider or create a default one
+        _logger = serviceProvider.GetService<ChirpLogger>() ?? new ChirpLogger(new Application.Common.ChirpOptions()
+        {
+            LoggingEnabled = false
+        });
+
+        _logger.LogInformation("RabbitMQ event bus created. Infrastructure will be initialized on first use.");
     }
 
     /// <summary>
@@ -168,9 +174,8 @@ public class ChirpRabbitMqEventBus : EventBusBase, IAsyncDisposable
             }
         }
         catch (Exception ex)
-        { 
-            if (!_logger.IsEnabled(LogLevel.Error)) return;
-            _logger.LogError(ex, "Error subscribing {HandlerName}: {Message}", typeof(TH).Name, ex.Message);
+        {
+            if (_logger.IsEnabled(LogLevel.Error)) _logger.LogError(ex, "Error subscribing {HandlerName}: {Message}", typeof(TH).Name, ex.Message);
             throw;
         }
     }

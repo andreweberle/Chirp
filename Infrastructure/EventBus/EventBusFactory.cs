@@ -155,7 +155,7 @@ public static class EventBusFactory
                 "RabbitMQ connection not registered in service provider");
 
         // Get exchange names from configuration (with defaults)
-        string exchangeName = configuration["RMQ:ExchangeName"] ?? "lithoconnect_event_bus";
+        string exchangeName = configuration["RMQ:ExchangeName"] ?? "chirp_event_bus";
         string dlxExchangeName = configuration["RMQ:ExchangeNameDLX"] ?? "_dlxExchangeName";
 
         // Create the RabbitMQ event bus
