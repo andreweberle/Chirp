@@ -148,6 +148,10 @@ public class EventBusFactoryOptionsTests
         // Arrange
         ServiceCollection serviceCollection = new();
 
+        // Add Chirp Logging.
+        serviceCollection.AddSingleton(options);
+        serviceCollection.AddSingleton<ChirpLogger>();
+
         // Create a connection factory using the test container
         ConnectionFactory connectionFactory = new()
         {

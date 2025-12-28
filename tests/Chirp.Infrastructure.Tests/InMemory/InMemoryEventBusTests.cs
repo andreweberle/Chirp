@@ -1,10 +1,12 @@
-using System;
-using System.Reflection;
 using Chirp.Application.Interfaces;
 using Chirp.Domain.Common;
 using Chirp.Infrastructure.EventBus.Common;
 using Chirp.Infrastructure.EventBus.InMemory;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Options;
+using System;
+using System.Reflection;
+using System.Threading.Channels;
 
 namespace Chirp.Infrastructure.Tests.InMemory;
 
@@ -99,6 +101,22 @@ public class InMemoryEventBusTests
         // Arrange
         InMemoryEventBusSubscriptionsManager subscriptionsManager = new();
         ServiceCollection serviceCollection = new();
+
+        // Register the complete in-memory infrastructure
+        serviceCollection.AddSingleton<Channel<IntegrationEvent>>(
+            _ => Channel.CreateUnbounded<IntegrationEvent>(new UnboundedChannelOptions()
+            {
+                SingleReader = true,
+                SingleWriter = false,
+                AllowSynchronousContinuations = false
+            }));
+
+        serviceCollection.AddSingleton<IChirpEventBusSubscriptionsManager>(subscriptionsManager);
+        serviceCollection.AddSingleton<IChirpInMemoryDeadLetterQueue, InMemoryDeadLetterQueue>();
+
+        // Register the processor 
+        serviceCollection.AddHostedService<ChirpInMemoryProcessor>();
+
         ServiceProvider serviceProvider = serviceCollection.BuildServiceProvider();
 
         const string queueName = "test_queue";
@@ -126,6 +144,22 @@ public class InMemoryEventBusTests
         // Arrange
         InMemoryEventBusSubscriptionsManager subscriptionsManager = new();
         ServiceCollection serviceCollection = new();
+
+        // Register the complete in-memory infrastructure
+        serviceCollection.AddSingleton<Channel<IntegrationEvent>>(
+            _ => Channel.CreateUnbounded<IntegrationEvent>(new UnboundedChannelOptions()
+            {
+                SingleReader = true,
+                SingleWriter = false,
+                AllowSynchronousContinuations = false
+            }));
+
+        serviceCollection.AddSingleton<IChirpEventBusSubscriptionsManager>(subscriptionsManager);
+        serviceCollection.AddSingleton<IChirpInMemoryDeadLetterQueue, InMemoryDeadLetterQueue>();
+
+        // Register the processor 
+        serviceCollection.AddHostedService<ChirpInMemoryProcessor>();
+
         ServiceProvider serviceProvider = serviceCollection.BuildServiceProvider();
 
         const string queueName = "test_publish_queue";
@@ -163,10 +197,26 @@ public class InMemoryEventBusTests
         TestIntegrationEventHandler typedHandler = new();
 
         // Set up DI with the handler as a singleton
-        ServiceCollection services = [];
-        services.AddSingleton(typedHandler);
-        services.AddSingleton<TestIntegrationEventHandler>(_ => typedHandler);
-        ServiceProvider serviceProvider = services.BuildServiceProvider();
+        ServiceCollection serviceCollection = [];
+        serviceCollection.AddSingleton(typedHandler);
+        serviceCollection.AddSingleton<TestIntegrationEventHandler>(_ => typedHandler);
+
+        // Register the complete in-memory infrastructure
+        serviceCollection.AddSingleton<Channel<IntegrationEvent>>(
+            _ => Channel.CreateUnbounded<IntegrationEvent>(new UnboundedChannelOptions()
+            {
+                SingleReader = true,
+                SingleWriter = false,
+                AllowSynchronousContinuations = false
+            }));
+
+        serviceCollection.AddSingleton<IChirpEventBusSubscriptionsManager>(subscriptionsManager);
+        serviceCollection.AddSingleton<IChirpInMemoryDeadLetterQueue, InMemoryDeadLetterQueue>();
+
+        // Register the processor
+        serviceCollection.AddHostedService<ChirpInMemoryProcessor>();
+
+        ServiceProvider serviceProvider = serviceCollection.BuildServiceProvider();
 
         // Create the bus
         ChirpInMemoryEventBus eventBus = new(
@@ -201,14 +251,30 @@ public class InMemoryEventBusTests
         ThirdTestIntegrationEventHandler handler3 = new();
 
         // Set up DI
-        ServiceCollection services = [];
-        services.AddSingleton(handler1);
-        services.AddSingleton<TestIntegrationEventHandler>(_ => handler1);
-        services.AddSingleton(handler2);
-        services.AddSingleton<SecondTestIntegrationEventHandler>(_ => handler2);
-        services.AddSingleton(handler3);
-        services.AddSingleton<ThirdTestIntegrationEventHandler>(_ => handler3);
-        ServiceProvider serviceProvider = services.BuildServiceProvider();
+        ServiceCollection serviceCollection = [];
+        serviceCollection.AddSingleton(handler1);
+        serviceCollection.AddSingleton<TestIntegrationEventHandler>(_ => handler1);
+        serviceCollection.AddSingleton(handler2);
+        serviceCollection.AddSingleton<SecondTestIntegrationEventHandler>(_ => handler2);
+        serviceCollection.AddSingleton(handler3);
+        serviceCollection.AddSingleton<ThirdTestIntegrationEventHandler>(_ => handler3);
+
+        // Register the complete in-memory infrastructure
+        serviceCollection.AddSingleton<Channel<IntegrationEvent>>(
+            _ => Channel.CreateUnbounded<IntegrationEvent>(new UnboundedChannelOptions()
+            {
+                SingleReader = true,
+                SingleWriter = false,
+                AllowSynchronousContinuations = false
+            }));
+
+        serviceCollection.AddSingleton<IChirpEventBusSubscriptionsManager>(subscriptionsManager);
+        serviceCollection.AddSingleton<IChirpInMemoryDeadLetterQueue, InMemoryDeadLetterQueue>();
+
+        // Register the processor
+        serviceCollection.AddHostedService<ChirpInMemoryProcessor>();
+
+        ServiceProvider serviceProvider = serviceCollection.BuildServiceProvider();
 
         // Create the bus
         ChirpInMemoryEventBus eventBus = new(
@@ -242,8 +308,20 @@ public class InMemoryEventBusTests
         InMemoryEventBusSubscriptionsManager subscriptionsManager = new();
 
         // Create a faulty service provider that returns null
-        ServiceCollection services = new();
-        ServiceProvider serviceProvider = services.BuildServiceProvider();
+        ServiceCollection serviceCollection = new();
+        // Register the complete in-memory infrastructure
+        serviceCollection.AddSingleton<Channel<IntegrationEvent>>(
+            _ => Channel.CreateUnbounded<IntegrationEvent>(new UnboundedChannelOptions()
+            {
+                SingleReader = true,
+                SingleWriter = false,
+                AllowSynchronousContinuations = false
+            }));
+
+        serviceCollection.AddSingleton<IChirpEventBusSubscriptionsManager>(subscriptionsManager);
+        serviceCollection.AddSingleton<IChirpInMemoryDeadLetterQueue, InMemoryDeadLetterQueue>();
+
+        ServiceProvider serviceProvider = serviceCollection.BuildServiceProvider();
 
         const string queueName = "test_error_logging_queue";
         const string exchangeName = "test_error_logging_exchange";
@@ -270,8 +348,24 @@ public class InMemoryEventBusTests
     {
         // Arrange
         InMemoryEventBusSubscriptionsManager subscriptionsManager = new();
-        ServiceCollection services = new();
-        ServiceProvider serviceProvider = services.BuildServiceProvider();
+        ServiceCollection serviceCollection = new();
+
+        // Register the complete in-memory infrastructure
+        serviceCollection.AddSingleton<Channel<IntegrationEvent>>(
+            _ => Channel.CreateUnbounded<IntegrationEvent>(new UnboundedChannelOptions()
+            {
+                SingleReader = true,
+                SingleWriter = false,
+                AllowSynchronousContinuations = false
+            }));
+
+        serviceCollection.AddSingleton<IChirpEventBusSubscriptionsManager>(subscriptionsManager);
+        serviceCollection.AddSingleton<IChirpInMemoryDeadLetterQueue, InMemoryDeadLetterQueue>();
+
+        // Register the processor
+        serviceCollection.AddHostedService<ChirpInMemoryProcessor>();
+
+        ServiceProvider serviceProvider = serviceCollection.BuildServiceProvider();
 
         const string queueName = "test_publish_success_queue";
         const string exchangeName = "test_publish_success_exchange";
@@ -308,11 +402,26 @@ public class InMemoryEventBusTests
         TestIntegrationEventHandler typedHandler = new();
 
         // Set up DI with the handler
-        ServiceCollection services = [];
-        services.AddSingleton(typedHandler);
-        services.AddSingleton<TestIntegrationEventHandler>(_ => typedHandler);
-        services.AddSingleton<IChirpInMemoryDeadLetterQueue, InMemoryDeadLetterQueue>();
-        ServiceProvider serviceProvider = services.BuildServiceProvider();
+        ServiceCollection serviceCollection = [];
+        serviceCollection.AddSingleton(typedHandler);
+        serviceCollection.AddSingleton<TestIntegrationEventHandler>(_ => typedHandler);
+
+        // Register the complete in-memory infrastructure
+        serviceCollection.AddSingleton<Channel<IntegrationEvent>>(
+            _ => Channel.CreateUnbounded<IntegrationEvent>(new UnboundedChannelOptions()
+            {
+                SingleReader = true,
+                SingleWriter = false,
+                AllowSynchronousContinuations = false
+            }));
+
+        serviceCollection.AddSingleton<IChirpEventBusSubscriptionsManager>(subscriptionsManager);
+        serviceCollection.AddSingleton<IChirpInMemoryDeadLetterQueue, InMemoryDeadLetterQueue>();
+
+        // Register the processor
+        serviceCollection.AddHostedService<ChirpInMemoryProcessor>();
+
+        ServiceProvider serviceProvider = serviceCollection.BuildServiceProvider();
 
         // Create the bus
         ChirpInMemoryEventBus eventBus = new(
@@ -362,9 +471,25 @@ public class InMemoryEventBusTests
         TestIntegrationEventHandler handler2 = new();
 
         // Set up DI
-        ServiceCollection services = new();
-        services.AddTransient<TestIntegrationEventHandler>(_ => handler1);
-        ServiceProvider serviceProvider = services.BuildServiceProvider();
+        ServiceCollection serviceCollection = new();
+        serviceCollection.AddTransient<TestIntegrationEventHandler>(_ => handler1);
+
+        // Register the complete in-memory infrastructure
+        serviceCollection.AddSingleton<Channel<IntegrationEvent>>(
+            _ => Channel.CreateUnbounded<IntegrationEvent>(new UnboundedChannelOptions()
+            {
+                SingleReader = true,
+                SingleWriter = false,
+                AllowSynchronousContinuations = false
+            }));
+
+        serviceCollection.AddSingleton<IChirpEventBusSubscriptionsManager>(subscriptionsManager);
+        serviceCollection.AddSingleton<IChirpInMemoryDeadLetterQueue, InMemoryDeadLetterQueue>();
+
+        // Register the processor 
+        serviceCollection.AddHostedService<ChirpInMemoryProcessor>();
+
+        ServiceProvider serviceProvider = serviceCollection.BuildServiceProvider();
 
         // Create the bus
         ChirpInMemoryEventBus eventBus = new(
