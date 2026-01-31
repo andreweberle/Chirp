@@ -57,12 +57,36 @@ public abstract class EventBusBase(
     {
         // Get the event type
         bool anyHandled = false;
-
+        
         // Get the event type
-        Type? eventType = SubscriptionsManager.GetEventTypeByName(eventName);
+        Type? eventType = null;
 
-        // Check if event type found
-        if (eventType == null) return false;
+        // Retry logic
+        int currentRetry = 0;
+        
+        // Keep trying until we get the event type or max retries exceeded
+        while (eventType == null)
+        {
+            // Check if max retries exceeded
+            if (currentRetry > RetryMax)
+            {
+                // Throw exception if max retries exceeded
+                throw new Exception($"Could not find event type for message: {message} after {RetryMax} retries.");
+            }
+            
+            // Get event type
+            eventType = SubscriptionsManager.GetEventTypeByName(eventName);
+            
+            // If found, break out of loop immediately.
+            if (eventType != null) break;
+            
+            // If not found, wait and retry
+            currentRetry++;
+            
+            // Wait before retrying
+            // We will wait for 1 second multiplied by the current retry attempt.
+            await Task.Delay(1000 * currentRetry, cancellationToken);
+        }
 
         // Deserialize the event
         object? integrationEvent = JsonSerializer.Deserialize(message, eventType, _jsonOptions);
@@ -74,10 +98,30 @@ public abstract class EventBusBase(
         foreach (SubscriptionInfo subscription in SubscriptionsManager.GetHandlersForEvent(eventName))
         {
             // Resolve the handler
-            object? handler = ServiceProvider.GetService(subscription.HandlerType);
+            object? handler = null;
 
-            // If handler not found, skip
-            if (handler == null) continue;
+            // Retry logic
+            int handlerRetry = 0;
+            while (handler == null)
+            {
+                // Check if max retries exceeded
+                if (handlerRetry > RetryMax)
+                {
+                    throw new Exception($"Could not resolve handler for subscription: {subscription}");
+                }
+                
+                // Attempt to resolve the handler
+                handler = ServiceProvider.GetService(subscription.HandlerType);
+                
+                // If resolved, break out of loop immediately.
+                if (handler != null) break;
+                
+                // If not resolved, wait and retry
+                handlerRetry++;
+                
+                // Wait before retrying
+                await Task.Delay(1000 * handlerRetry, cancellationToken);
+            }
 
             // Create the concrete handler type
             Type concreteType = typeof(IChirpIntegrationEventHandler<>).MakeGenericType(eventType);
@@ -86,7 +130,10 @@ public abstract class EventBusBase(
             MethodInfo? method = concreteType.GetMethod("Handle");
 
             // If method not found, skip
-            if (method == null) continue;
+            if (method == null)
+            {
+                throw new Exception($"Could not find Handle method for integration event: {eventType.Name}");
+            }
             
             // Invoke the handler
             await (Task)method.Invoke(handler, [integrationEvent])!;
