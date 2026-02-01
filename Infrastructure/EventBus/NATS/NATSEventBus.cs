@@ -22,7 +22,7 @@ public class NATSEventBus(
     IServiceProvider serviceProvider,
     IChirpEventBusSubscriptionsManager eventBusSubscriptionsManager,
     string subjectPrefix,
-    string queueGroup = null) : EventBusBase(0, eventBusSubscriptionsManager, serviceProvider)
+    string queueGroup = null) : EventBusBase(0, serviceProvider, eventBusSubscriptionsManager)
 {
     private readonly INATSConnection _natsConnection = natsConnection ?? throw new ArgumentNullException(nameof(natsConnection));
     private readonly string _subjectPrefix = subjectPrefix ?? throw new ArgumentNullException(nameof(subjectPrefix));

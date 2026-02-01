@@ -725,7 +725,7 @@ public class RabbitMqEventBusTests
         const string dlxExchangeName = "test_multiple_subscriptions_dlx_exchange";
 
         // Predeclare the exchange and queue
-        using (IChannel adminChannel = await connection.CreateChannelAsync(TestContext.CancellationToken))
+        await using (IChannel adminChannel = await connection.CreateChannelAsync(TestContext.CancellationToken))
         {
             await adminChannel.ExchangeDeclareAsync(
                 exchangeName,

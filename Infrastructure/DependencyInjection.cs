@@ -10,6 +10,7 @@ using Microsoft.Extensions.Options;
 using RabbitMQ.Client;
 using System.Reflection;
 using System.Threading.Channels;
+using Chirp.Infrastructure.EventBus.Common;
 
 namespace Chirp.Infrastructure;
 
@@ -512,6 +513,9 @@ public static class DependencyInjection
         // Determine the event bus type from options
         EventBusType eventBusType = DetermineEventBusType(options);
 
+        // Register the subscription manager as a singleton
+        services.AddSingleton<IChirpEventBusSubscriptionsManager, InMemoryEventBusSubscriptionsManager>();
+        
         // Register necessary connections based on event bus type
         switch (eventBusType)
         {
@@ -629,7 +633,6 @@ public static class DependencyInjection
         private IServiceCollection AddRabbitMqConnection(IConfiguration configuration,
             RabbitMqChirpOptions? options = null)
         {
-            
             services.AddSingleton<IChirpRabbitMqConnection>(sp =>
             {
                 string host = options?.Host ?? configuration.GetValue<string>("RMQ:Host") ?? throw new ArgumentNullException("RMQ:Host configuration is missing");

@@ -22,7 +22,7 @@ public class RedisEventBus(
     IRedisConnection redisConnection,
     IServiceProvider serviceProvider,
     IChirpEventBusSubscriptionsManager eventBusSubscriptionsManager,
-    string channelPrefix) : EventBusBase(0, eventBusSubscriptionsManager, serviceProvider)
+    string channelPrefix) : EventBusBase(0, serviceProvider, eventBusSubscriptionsManager)
 {
     private readonly IRedisConnection _redisConnection = redisConnection ?? throw new ArgumentNullException(nameof(redisConnection));
     private readonly string _channelPrefix = channelPrefix ?? throw new ArgumentNullException(nameof(channelPrefix));

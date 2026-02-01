@@ -11,11 +11,15 @@ namespace Chirp.Infrastructure.EventBus;
 /// </summary>
 public abstract class EventBusBase(
     int retryMax,
-    IServiceProvider serviceProvider)
+    IServiceProvider serviceProvider,
+    IChirpEventBusSubscriptionsManager subscriptionsManager)
     : IChirpEventBus
 {
     private readonly IServiceProvider ServiceProvider =
         serviceProvider ?? throw new ArgumentNullException(nameof(serviceProvider));
+    
+    private readonly IChirpEventBusSubscriptionsManager _subscriptionsManager =
+        subscriptionsManager ?? throw new ArgumentNullException(nameof(subscriptionsManager));
     
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -51,14 +55,12 @@ public abstract class EventBusBase(
     /// <returns></returns>
     public async Task<bool> ProcessHandlers(string eventName, string message, CancellationToken cancellationToken = default)
     {
+        // Get the event type
+        bool anyHandled = false;
+        
         // Create a scope to ensure
         await using AsyncServiceScope scope = ServiceProvider.CreateAsyncScope(); 
         
-        // Get the SubscriptionManager from DI
-        IChirpEventBusSubscriptionsManager subscriptionsManager = scope.ServiceProvider.GetRequiredService<IChirpEventBusSubscriptionsManager>();
-        
-        // Get the event type
-        bool anyHandled = false;
         
         // Get the event type
         Type? eventType = null;
@@ -77,7 +79,7 @@ public abstract class EventBusBase(
             }
             
             // Get event type
-            eventType = subscriptionsManager.GetEventTypeByName(eventName);
+            eventType = _subscriptionsManager.GetEventTypeByName(eventName);
             
             // If found, break out of loop immediately.
             if (eventType != null) break;
@@ -97,7 +99,7 @@ public abstract class EventBusBase(
         if (integrationEvent == null) return false;
         
         // Process each subscription
-        foreach (SubscriptionInfo subscription in subscriptionsManager.GetHandlersForEvent(eventName))
+        foreach (SubscriptionInfo subscription in _subscriptionsManager.GetHandlersForEvent(eventName))
         {
             // Resolve the handler
             object? handler = null;
@@ -112,9 +114,9 @@ public abstract class EventBusBase(
                     throw new Exception($"Could not resolve handler for subscription: {subscription}");
                 }
 
-                // Attempt to resolve the handler
+                // Resolve handlers from scope (so scoped services work)
                 handler = scope.ServiceProvider.GetService(subscription.HandlerType);
-
+                
                 // If resolved, break out of loop immediately.
                 if (handler != null) break;
 

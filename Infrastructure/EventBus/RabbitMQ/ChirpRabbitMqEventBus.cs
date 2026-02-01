@@ -17,6 +17,7 @@ public class ChirpRabbitMqEventBus : EventBusBase, IAsyncDisposable
 {
     private const string BrokerName = "chirp_event_bus";
     private readonly IChirpRabbitMqConnection _rabbitMQConnection;
+    private readonly IChirpEventBusSubscriptionsManager _subscriptionsManager;
     private readonly string _queueName;
     private readonly string _dlxQueueName;
     private readonly int _retryMax;
@@ -59,12 +60,13 @@ public class ChirpRabbitMqEventBus : EventBusBase, IAsyncDisposable
         int retryMax = 5,
         string exchangeName = BrokerName,
         string dlxExchangeName = "_dlxExchangeName")
-        : base(retryMax, eventBusSubscriptionsManager, serviceProvider)
+        : base(retryMax, serviceProvider, eventBusSubscriptionsManager)
     {
         _rabbitMQConnection = rabbitMQConnection ?? throw new ArgumentNullException(nameof(rabbitMQConnection));
         _queueName = queueName ?? throw new ArgumentNullException(nameof(queueName));
         _dlxQueueName = $"dlx.{_queueName}";
         _retryMax = retryMax;
+        _subscriptionsManager = eventBusSubscriptionsManager ?? throw new ArgumentNullException(nameof(eventBusSubscriptionsManager));
         ExchangeName = exchangeName;
         DlxExchangeName = dlxExchangeName;
 
@@ -162,7 +164,7 @@ public class ChirpRabbitMqEventBus : EventBusBase, IAsyncDisposable
             }
 
             // Register subscription
-            SubscriptionsManager.AddSubscription<T, TH>();
+            _subscriptionsManager.AddSubscription<T, TH>();
 
             // Start the consumer if not already started
             await StartConsumerAsync(cancellationToken);

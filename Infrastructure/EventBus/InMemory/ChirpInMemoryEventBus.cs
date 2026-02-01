@@ -37,7 +37,7 @@ public class ChirpInMemoryEventBus : EventBusBase
         string queueName,
         int retryMax = 5,
         string exchangeName = ChirpInMemoryEventBus.BrokerName,
-        string dlxExchangeName = "_dlxExchangeName") : base(retryMax, subscriptionsManager, serviceProvider)
+        string dlxExchangeName = "_dlxExchangeName") : base(retryMax, serviceProvider, subscriptionsManager)
     {
         _serviceProvider = serviceProvider;
         _exchangeName = exchangeName;
@@ -106,7 +106,7 @@ public class ChirpInMemoryEventBus : EventBusBase
             }
 
             // Register subscription
-            SubscriptionsManager.AddSubscription<T, TH>();
+            _subscriptionsManager.AddSubscription<T, TH>();
 
             // Mark consumer as started
             this._isConsumerStarted = true;

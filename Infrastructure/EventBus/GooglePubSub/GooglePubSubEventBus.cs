@@ -39,7 +39,7 @@ public class GooglePubSubEventBus : EventBusBase
         IChirpEventBusSubscriptionsManager eventBusSubscriptionsManager,
         string topicPrefix,
         string subscriptionIdPrefix)
-        : base(0, eventBusSubscriptionsManager, serviceProvider)
+        : base(0, serviceProvider, eventBusSubscriptionsManager)
     {
         _pubSubConnection = pubSubConnection ?? throw new ArgumentNullException(nameof(pubSubConnection));
         _topicPrefix = topicPrefix ?? throw new ArgumentNullException(nameof(topicPrefix));

@@ -39,7 +39,7 @@ public class AzureServiceBusEventBus : EventBusBase
         IChirpEventBusSubscriptionsManager eventBusSubscriptionsManager,
         string topicOrQueueName,
         int retryMax = 5)
-        : base(retryMax, eventBusSubscriptionsManager, serviceProvider)
+        : base(retryMax, serviceProvider, eventBusSubscriptionsManager)
     {
         _serviceBusConnection = serviceBusConnection ?? throw new ArgumentNullException(nameof(serviceBusConnection));
         _topicOrQueueName = topicOrQueueName ?? throw new ArgumentNullException(nameof(topicOrQueueName));

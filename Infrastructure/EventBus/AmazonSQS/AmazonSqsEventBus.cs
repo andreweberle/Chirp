@@ -41,7 +41,7 @@ public class AmazonSqsEventBus : EventBusBase
         string queueUrl,
         string deadLetterQueueUrl,
         int retryMax = 5)
-        : base(retryMax, eventBusSubscriptionsManager, serviceProvider)
+        : base(retryMax, serviceProvider, eventBusSubscriptionsManager)
     {
         _sqsConnection = sqsConnection ?? throw new ArgumentNullException(nameof(sqsConnection));
         _queueUrl = queueUrl ?? throw new ArgumentNullException(nameof(queueUrl));
