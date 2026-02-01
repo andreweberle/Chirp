@@ -11,17 +11,13 @@ namespace Chirp.Infrastructure.EventBus;
 /// </summary>
 public abstract class EventBusBase(
     int retryMax,
-    IChirpEventBusSubscriptionsManager subscriptionsManager,
     IServiceProvider serviceProvider)
     : IChirpEventBus
 {
-    protected readonly IChirpEventBusSubscriptionsManager SubscriptionsManager =
-        subscriptionsManager ?? throw new ArgumentNullException(nameof(subscriptionsManager));
-
-    protected readonly IServiceProvider ServiceProvider =
+    private readonly IServiceProvider ServiceProvider =
         serviceProvider ?? throw new ArgumentNullException(nameof(serviceProvider));
     
-    private static readonly JsonSerializerOptions _jsonOptions = new()
+    private static readonly JsonSerializerOptions JsonOptions = new()
     {
         IncludeFields = true,
         WriteIndented = true,
@@ -55,6 +51,12 @@ public abstract class EventBusBase(
     /// <returns></returns>
     public async Task<bool> ProcessHandlers(string eventName, string message, CancellationToken cancellationToken = default)
     {
+        // Create a scope to ensure
+        await using AsyncServiceScope scope = ServiceProvider.CreateAsyncScope(); 
+        
+        // Get the SubscriptionManager from DI
+        IChirpEventBusSubscriptionsManager subscriptionsManager = scope.ServiceProvider.GetRequiredService<IChirpEventBusSubscriptionsManager>();
+        
         // Get the event type
         bool anyHandled = false;
         
@@ -75,7 +77,7 @@ public abstract class EventBusBase(
             }
             
             // Get event type
-            eventType = SubscriptionsManager.GetEventTypeByName(eventName);
+            eventType = subscriptionsManager.GetEventTypeByName(eventName);
             
             // If found, break out of loop immediately.
             if (eventType != null) break;
@@ -89,13 +91,13 @@ public abstract class EventBusBase(
         }
 
         // Deserialize the event
-        object? integrationEvent = JsonSerializer.Deserialize(message, eventType, _jsonOptions);
+        object? integrationEvent = JsonSerializer.Deserialize(message, eventType, JsonOptions);
 
         // Check if deserialization succeeded
         if (integrationEvent == null) return false;
-
+        
         // Process each subscription
-        foreach (SubscriptionInfo subscription in SubscriptionsManager.GetHandlersForEvent(eventName))
+        foreach (SubscriptionInfo subscription in subscriptionsManager.GetHandlersForEvent(eventName))
         {
             // Resolve the handler
             object? handler = null;
@@ -109,16 +111,16 @@ public abstract class EventBusBase(
                 {
                     throw new Exception($"Could not resolve handler for subscription: {subscription}");
                 }
-                
+
                 // Attempt to resolve the handler
-                handler = ServiceProvider.GetService(subscription.HandlerType);
-                
+                handler = scope.ServiceProvider.GetService(subscription.HandlerType);
+
                 // If resolved, break out of loop immediately.
                 if (handler != null) break;
-                
+
                 // If not resolved, wait and retry
                 handlerRetry++;
-                
+
                 // Wait before retrying
                 await Task.Delay(1000 * handlerRetry, cancellationToken);
             }
@@ -129,17 +131,17 @@ public abstract class EventBusBase(
             // Get the Handle method
             MethodInfo? method = concreteType.GetMethod("Handle");
 
-            // If method not found, skip
-            if (method == null)
-            {
-                throw new Exception($"Could not find Handle method for integration event: {eventType.Name}");
-            }
-            
-            // Invoke the handler
-            await (Task)method.Invoke(handler, [integrationEvent])!;
+                // If method not found, skip
+                if (method == null)
+                {
+                    throw new Exception($"Could not find Handle method for integration event: {eventType.Name}");
+                }
+                
+                // Invoke the handler
+                await (Task)method.Invoke(handler, [integrationEvent])!;
 
-            // Mark as handled
-            anyHandled = true;
+                // Mark as handled
+                anyHandled = true;
         }
 
         // Return whether any handler processed the event
